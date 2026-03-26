@@ -65,7 +65,7 @@ Tenants see **cloud APIs** (Compute, VM, Notebook, GPU). They never see pods, no
 |   Management Cluster:                                      |
 |   +- KCP server + front-proxy                              |
 |   +- Identity provider (Zitadel or Dex)                    |
-|   +- Service operators (translate tenant APIs -> workloads)|
+|   +- Cloud operator (translates tenant APIs -> workloads)|
 |   +- Billing (OpenMeter, optional for v1)                  |
 |   +- Monitoring (Prometheus + Grafana)                     |
 +----------------------------+------------------------------+
@@ -102,7 +102,7 @@ KCP               Multi-tenant control plane            YES - core
 Kubernetes        Runs workloads                        YES - core
 Cilium            Networking + tenant isolation          YES - core
 OIDC provider     Tenant authentication                 YES - core
-1 operator        Proves the pattern                    YES - core
+Cloud operator    Reconciles all platform APIs           YES - core
 ```
 
 Everything else layers on top when you need it:
@@ -163,7 +163,7 @@ spec:
 ```
 
 ```
-Compute operator sees this (via KCP virtual workspace)
+Cloud operator sees this (via KCP virtual workspace)
     |
     v
 Creates in workload cluster:
@@ -234,10 +234,10 @@ The platform is extensible by design. Adding a new service (e.g., managed Postgr
 
 1. **Define the API** — write an `APIResourceSchema` (like a CRD)
 2. **Export the API** — create an `APIExport` in the platform workspace
-3. **Write an operator** — watches KCP virtual workspace, creates resources on backend
+3. **Add a reconciler** — add the new resource type to the cloud operator
 4. **Bind to tenants** — add the APIBinding to tenant workspaces
 
-No platform core changes. The operator pattern scales to any number of services.
+No platform core changes. A single **cloud operator** handles all platform APIs (Compute, VM, Notebook, GPU, Storage, Network). New resource types are added as reconcilers within this operator.
 
 ---
 
@@ -272,10 +272,12 @@ When you need the full production setup, see `whitepaper.md`. The full stack add
 | Cluster Lifecycle | Cluster API | Declarative cluster management |
 | Identity | Zitadel | Full IAM with user management |
 | Storage | Rook-Ceph | Block + object storage |
-| GPU | NVIDIA GPU Operator + Kueue | GPU management + job scheduling |
+| GPU | NVIDIA GPU Operator | GPU management + scheduling |
+| GPU Scheduling | Kueue | Job queuing (when needed) |
 | VMs | KubeVirt | Virtual machine support |
 | Billing | OpenMeter + Stripe | Usage-based billing |
-| Observability | Prometheus + VictoriaMetrics + Grafana | Monitoring + dashboards |
+| Observability | Prometheus + Grafana | Monitoring + dashboards |
+| Long-term Metrics | VictoriaMetrics | Metrics retention (when needed) |
 | Security | gVisor, Cilium encryption | Runtime sandboxing, encryption |
 | Backup | Velero + etcd snapshots | Disaster recovery |
 
