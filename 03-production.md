@@ -10,7 +10,7 @@
 
 This document answers: **"I have a working multi-tenant platform (Layer 2). How do I make it a production-grade business?"**
 
-Layer 1 ([01-compute-platform.md](01-compute-platform.md)) builds the infrastructure: bare metal, Kubernetes, KCP, identity, storage, and networking. Layer 2 adds multi-tenancy, workload APIs, and basic observability. This layer — Layer 3 — adds everything needed to run the platform as a production service:
+Layer 1 ([01-compute-platform.md](01-compute-platform.md)) builds the infrastructure: bare metal, Kubernetes, kcp, identity, storage, and networking. Layer 2 adds multi-tenancy, workload APIs, and basic observability. This layer — Layer 3 — adds everything needed to run the platform as a production service:
 
 - **Billing and metering** — Track usage, generate invoices, collect payment
 - **Advanced monitoring and alerting** — Platform-wide and per-tenant observability
@@ -23,7 +23,7 @@ Layer 1 ([01-compute-platform.md](01-compute-platform.md)) builds the infrastruc
 ### Prerequisites
 
 - Layer 1 deployed: bare-metal infrastructure, management cluster, workload cluster(s)
-- Layer 2 deployed: KCP with workspace-per-tenant, Zitadel OIDC, onboarding controller, basic Prometheus + Grafana
+- Layer 2 deployed: kcp with workspace-per-tenant, Zitadel OIDC, onboarding controller, basic Prometheus + Grafana
 - Helm 3 and kubectl on management workstation
 - A Stripe account (or alternative payment processor) for paid tiers
 
@@ -40,7 +40,7 @@ OpenMeter was selected as the billing engine because it covers the most requirem
 | License | Apache 2.0 |
 | Language | Go (consistent with the rest of the stack) |
 | K8s-native collector | Yes (DaemonSet, scrapes kubelet per pod) |
-| Entitlements API | Yes (enables quota enforcement at the KCP admission layer) |
+| Entitlements API | Yes (enables quota enforcement at the kcp admission layer) |
 | Built-in billing | Yes (plans, subscriptions, invoicing) |
 | Self-hostable | Yes (all data stays on provider infrastructure) |
 | Payment integration | Stripe native, others via interface |
@@ -142,7 +142,7 @@ All billing models are configured per tenant — different tenants can be on dif
 
 Free-tier tenants have tight resource quotas and no billing relationship:
 
-- **Quotas**: 1 CPU, 2 GB RAM, 0 GPU (enforced via KCP ResourceQuota + OpenMeter entitlements)
+- **Quotas**: 1 CPU, 2 GB RAM, 0 GPU (enforced via kcp ResourceQuota + OpenMeter entitlements)
 - **Billing**: None required — no payment method on file
 - **Purpose**: Trial, evaluation, learning
 - **Metering**: Usage is still tracked (for provider capacity planning) but not invoiced
@@ -233,12 +233,12 @@ Swapping the payment processor requires:
 
 ## 4. Quota Enforcement
 
-### KCP Admission Webhook
+### kcp Admission Webhook
 
-A custom admission webhook runs in the KCP server context and intercepts resource creation requests:
+A custom admission webhook runs in the kcp server context and intercepts resource creation requests:
 
 ```
-Tenant creates Notebook  -->  KCP admission webhook
+Tenant creates Notebook  -->  kcp admission webhook
   --> Queries OpenMeter: "Does tenant-{id} have GPU entitlement?"
   --> If yes: allow
   --> If no (free tier, credits exhausted): reject with clear error
@@ -279,13 +279,13 @@ Tier transitions are self-service and handled by the billing controller:
 | Pay-as-you-go to Subscription | User selects plan | Update subscription, adjust entitlements |
 | Any to Enterprise | Admin action | Manual configuration in OpenMeter |
 
-On upgrade, the billing controller: (1) verifies payment method or credit balance via OpenMeter API, (2) updates the OpenMeter subscription, (3) updates KCP ResourceQuota, and (4) updates workspace labels/annotations.
+On upgrade, the billing controller: (1) verifies payment method or credit balance via OpenMeter API, (2) updates the OpenMeter subscription, (3) updates kcp ResourceQuota, and (4) updates workspace labels/annotations.
 
 ### Reference Files
 
 ```
 deploy/quota/
-  quota-webhook.yaml          # KCP admission webhook for entitlements
+  quota-webhook.yaml          # kcp admission webhook for entitlements
   quota-controller.yaml       # Credit balance monitor
 ```
 
@@ -313,7 +313,7 @@ The full onboarding flow integrates identity, workspace creation, and billing se
         |
         v
 2. Onboarding controller detects new user
-   +-- Creates KCP workspace (tenant-{id})
+   +-- Creates kcp workspace (tenant-{id})
    +-- Binds RBAC (user = workspace admin)
    +-- Creates APIBindings (compute, storage, network, ai)
    +-- Sets ResourceQuota (free tier defaults)
@@ -359,7 +359,7 @@ These alerts should fire on the platform operations channel (PagerDuty, Slack, e
 
 | Alert | Severity | Condition |
 |-------|----------|-----------|
-| KCP control plane down | Critical | KCP API server unreachable for > 2 minutes |
+| kcp control plane down | Critical | kcp API server unreachable for > 2 minutes |
 | GPU node not ready | Warning | Any GPU node in NotReady state for > 5 minutes |
 | Ceph health degraded | Warning | Ceph reports HEALTH_WARN or HEALTH_ERR |
 | Tenant quota at 90% | Info | Any tenant within 10% of any entitlement limit |
@@ -387,7 +387,7 @@ Track service-level objectives for the platform:
 
 | SLO | Target | Measurement |
 |-----|--------|-------------|
-| KCP API availability | 99.9% | Synthetic probes every 30 seconds |
+| kcp API availability | 99.9% | Synthetic probes every 30 seconds |
 | Workload scheduling latency | < 30 seconds | Time from resource creation to pod running |
 | Metering accuracy | < 5% error | Compare OpenMeter totals to kubelet totals |
 | Invoice generation | Within 24 hours of period end | OpenMeter invoice timestamps |
@@ -412,7 +412,7 @@ These are not required for production launch but are valuable for debugging comp
 
 | Component | Method | Frequency | Retention |
 |-----------|--------|-----------|-----------|
-| KCP etcd | etcd snapshot | Hourly | 7 days |
+| kcp etcd | etcd snapshot | Hourly | 7 days |
 | Zitadel PostgreSQL | pg_dump | Every 6 hours | 30 days |
 | OpenMeter PostgreSQL | pg_dump | Every 6 hours | 30 days |
 | OpenMeter ClickHouse | ClickHouse backup | Daily | 30 days |
@@ -443,7 +443,7 @@ A CronJob on each cluster takes hourly etcd snapshots and uploads them to Ceph o
 
 | Priority | Components | Frequency |
 |----------|-----------|-----------|
-| Critical | KCP etcd, workload cluster etcd | Hourly |
+| Critical | kcp etcd, workload cluster etcd | Hourly |
 | Platform | Zitadel PostgreSQL, OpenMeter PostgreSQL | Every 6 hours |
 | Data | ClickHouse, Ceph snapshots | Daily |
 | Tenant workloads | Velero scheduled backups | Weekly (configurable per tenant) |
@@ -496,7 +496,7 @@ CAPI performs a rolling update: cordon, drain, replace one node at a time. Workl
 
 To add a new API to the platform (e.g., a managed database service):
 
-1. **Define the API** — Create a new APIResourceSchema and APIExport in the KCP platform workspace
+1. **Define the API** — Create a new APIResourceSchema and APIExport in the kcp platform workspace
 2. **Deploy the operator** — Deploy the reconciler on the management cluster (the "cloud operator" pattern from Layer 2)
 3. **Update onboarding** — Modify the onboarding controller to auto-bind the new API for new tenants
 4. **Add metering** — Emit CloudEvents for the new service to OpenMeter
@@ -520,7 +520,7 @@ All public-facing endpoints use TLS certificates from Let's Encrypt, managed by 
 
 | Record | Type | Target | Purpose |
 |--------|------|--------|---------|
-| `kcp.example.com` | A | Management cluster LB | KCP API endpoint |
+| `kcp.example.com` | A | Management cluster LB | kcp API endpoint |
 | `auth.example.com` | A / CNAME | Management cluster LB | Zitadel OIDC |
 | `console.example.com` | A / CNAME | Management cluster LB | Web console |
 | `grafana.example.com` | A / CNAME | Management cluster LB | Grafana dashboards |
@@ -571,7 +571,7 @@ No workload data, usage patterns, or tenant resource details are sent externally
 | **Kafka / Redpanda** | Event streaming for OpenMeter | Apache 2.0 | Management cluster |
 | **ClickHouse** | Usage data aggregation | Apache 2.0 | Management cluster |
 | **Stripe** (or alternative) | Payment processing | SaaS | External |
-| **Quota Webhook** | Entitlement enforcement at KCP API | Custom | KCP server |
+| **Quota Webhook** | Entitlement enforcement at kcp API | Custom | kcp server |
 | **Quota Controller** | Credit balance monitoring | Custom | Management cluster |
 | **Velero** | Workload backup and restore | Apache 2.0 | Management + workload clusters |
 | **cert-manager** | TLS certificate lifecycle | Apache 2.0 | Management cluster |

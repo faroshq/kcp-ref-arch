@@ -11,7 +11,7 @@
 
 A blueprint for turning a few servers into a multi-tenant cloud platform using open-source tools. Tenants sign in, get an isolated workspace, deploy workloads, and get billed — all through Kubernetes-native APIs.
 
-**KCP** sits at the center as the multi-tenant control plane.
+**kcp** sits at the center as the multi-tenant control plane.
 
 ---
 
@@ -21,7 +21,7 @@ A blueprint for turning a few servers into a multi-tenant cloud platform using o
 Tenant signs in (Google/GitHub)
     |
     v
-Gets a KCP workspace (isolated API surface)
+Gets a kcp workspace (isolated API surface)
     |
     v
 Creates workloads via high-level APIs (not raw K8s)
@@ -48,7 +48,7 @@ Tenants see **cloud APIs** (Compute, VM, Notebook, GPU). They never see pods, no
 |   Web Console / CLI / kubectl                              |
 |       |                                                    |
 |       v                                                    |
-|   KCP Workspace  <-- OIDC (Google/GitHub)                  |
+|   kcp Workspace  <-- OIDC (Google/GitHub)                  |
 |   +- Compute API                                          |
 |   +- VM API                                               |
 |   +- Notebook API                                         |
@@ -63,7 +63,7 @@ Tenants see **cloud APIs** (Compute, VM, Notebook, GPU). They never see pods, no
 |           (what the platform operator runs)                |
 |                                                            |
 |   Management Cluster:                                      |
-|   +- KCP server + front-proxy                              |
+|   +- kcp server + front-proxy                              |
 |   +- Identity provider (Zitadel or Dex)                    |
 |   +- Cloud operator (translates tenant APIs -> workloads)|
 |   +- Billing (OpenMeter, optional for v1)                  |
@@ -98,7 +98,7 @@ You can start with just **5 components**:
 ```
 Component         What it does                          Required?
 ---------         ------------                          ---------
-KCP               Multi-tenant control plane            YES - core
+kcp               Multi-tenant control plane            YES - core
 Kubernetes        Runs workloads                        YES - core
 Cilium            Networking + tenant isolation          YES - core
 OIDC provider     Tenant authentication                 YES - core
@@ -135,7 +135,7 @@ OIDC provider authenticates, issues JWT
     |
     v
 Onboarding controller:
-  +- Creates KCP workspace "tenant-jane"
+  +- Creates kcp workspace "tenant-jane"
   +- Binds platform APIs (Compute, Storage, etc.)
   +- Sets quotas (free tier: 1 CPU, 2GB RAM)
   +- Creates billing record (if billing enabled)
@@ -147,7 +147,7 @@ User gets a kubeconfig pointing to their workspace
 ### 2. Creating a Workload
 
 ```yaml
-# Tenant applies this to their KCP workspace:
+# Tenant applies this to their kcp workspace:
 apiVersion: compute.cloud.example/v1
 kind: Compute
 metadata:
@@ -163,7 +163,7 @@ spec:
 ```
 
 ```
-Cloud operator sees this (via KCP virtual workspace)
+Cloud operator sees this (via kcp virtual workspace)
     |
     v
 Creates in workload cluster:
@@ -174,7 +174,7 @@ Creates in workload cluster:
   +- NetworkPolicy (isolate from other tenants)
     |
     v
-Updates status in KCP:
+Updates status in kcp:
   status:
     phase: Ready
     url: https://my-app.tenant-jane.cloud.example.com
@@ -194,11 +194,11 @@ $ kubectl get all
 
 ---
 
-## KCP: Why It Matters
+## kcp: Why It Matters
 
-KCP is not "another Kubernetes cluster". It's a **multi-tenant API server** that looks like Kubernetes but serves a different purpose:
+kcp is not "another Kubernetes cluster". It's a **multi-tenant API server** that looks like Kubernetes but serves a different purpose:
 
-| Kubernetes Cluster | KCP |
+| Kubernetes Cluster | kcp |
 |---|---|
 | Runs containers | Serves APIs |
 | One set of CRDs for everyone | Different CRDs per workspace |
@@ -206,7 +206,7 @@ KCP is not "another Kubernetes cluster". It's a **multi-tenant API server** that
 | Tenants can see nodes, pods | Tenants see only their APIs |
 | Scaling = more nodes | Scaling = more workspaces (near-zero cost) |
 
-**The key insight:** KCP lets you define what APIs each tenant sees. A tenant workspace might have `Compute`, `Notebook`, and `Volume` APIs — but no `Pod`, `Deployment`, or `Node`. The platform operator controls the abstraction.
+**The key insight:** kcp lets you define what APIs each tenant sees. A tenant workspace might have `Compute`, `Notebook`, and `Volume` APIs — but no `Pod`, `Deployment`, or `Node`. The platform operator controls the abstraction.
 
 ---
 
@@ -215,7 +215,7 @@ KCP is not "another Kubernetes cluster". It's a **multi-tenant API server** that
 Two layers, neither visible to the tenant:
 
 ```
-Layer 1: API Isolation (KCP)
+Layer 1: API Isolation (kcp)
   +- Separate workspace per tenant
   +- Independent RBAC, quotas, secrets
   +- Tenants cannot discover each other
@@ -291,7 +291,7 @@ Every component is open source:
 
 | License | Components |
 |---------|-----------|
-| **Apache 2.0** | KCP, Kubernetes, Cilium, Metal3, Flatcar, Rook-Ceph, OpenMeter, Kueue, KubeVirt, Prometheus, gVisor, Cluster API, cert-manager, GPU Operator |
+| **Apache 2.0** | kcp, Kubernetes, Cilium, Metal3, Flatcar, Rook-Ceph, OpenMeter, Kueue, KubeVirt, Prometheus, gVisor, Cluster API, cert-manager, GPU Operator |
 | **AGPL-3.0** | Zitadel (server), Grafana — deployed unmodified, no copyleft impact |
 
 No BSL, SSPL, or proprietary licenses. No commercial components required.
@@ -305,7 +305,7 @@ No BSL, SSPL, or proprietary licenses. No commercial components required.
 | Document | Layer | What it covers |
 |----------|-------|---------------|
 | **01-infrastructure.md** | Layer 1 | Bare metal → K8s (Metal3, Flatcar, Cilium, Ceph, GPU, KubeVirt) |
-| **02-platform.md** | Layer 2 | Multi-tenant cloud APIs (KCP, Identity, Cloud Operator, CLI, Console) — **demo lives here** |
+| **02-platform.md** | Layer 2 | Multi-tenant cloud APIs (kcp, Identity, Cloud Operator, CLI, Console) — **demo lives here** |
 | **03-production.md** | Layer 3 | Productionization (billing, metering, monitoring, backup, day-2 ops) |
 
 ### Other Documents
@@ -326,7 +326,7 @@ No BSL, SSPL, or proprietary licenses. No commercial components required.
 1. Get 3 Linux servers (bare metal, VMs, or cloud instances)
 2. Install Kubernetes (kubeadm or k3s)
 3. Install Cilium
-4. Install KCP
+4. Install kcp
 5. Deploy the cloud operator
 6. Create a tenant workspace
 7. Apply a Compute resource — see it running on the backend

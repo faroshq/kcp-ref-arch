@@ -1,4 +1,4 @@
-# Layer 2: Multi-Tenant Cloud Platform with KCP
+# Layer 2: Multi-Tenant Cloud Platform with kcp
 
 ## Slicing Compute for Tenants via Kubernetes-Native APIs
 
@@ -13,7 +13,7 @@
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [KCP -- The Multi-Tenant Control Plane](#2-kcp--the-multi-tenant-control-plane)
+2. [kcp -- The Multi-Tenant Control Plane](#2-kcp--the-multi-tenant-control-plane)
 3. [Identity and Access](#3-identity-and-access)
 4. [Tenant Model](#4-tenant-model)
 5. [Platform APIs -- The Cloud Interface](#5-platform-apis--the-cloud-interface)
@@ -34,8 +34,8 @@ Layer 2 takes the compute-ready Kubernetes cluster from Layer 1 and turns it int
 
 This layer adds four capabilities on top of Layer 1 infrastructure:
 
-1. **Multi-tenancy** -- isolated workspaces per tenant via KCP
-2. **Cloud APIs** -- high-level resource types (Compute, VM, Notebook, GPUJob, Volume, ObjectBucket, PublicIP) exposed through KCP's APIExport/APIBinding mechanism
+1. **Multi-tenancy** -- isolated workspaces per tenant via kcp
+2. **Cloud APIs** -- high-level resource types (Compute, VM, Notebook, GPUJob, Volume, ObjectBucket, PublicIP) exposed through kcp's APIExport/APIBinding mechanism
 3. **Identity** -- OIDC-based authentication for web, CLI, and programmatic access
 4. **Cloud Operator** -- a single operator that watches tenant resources and provisions workloads on the backend cluster
 
@@ -46,7 +46,7 @@ This layer adds four capabilities on top of Layer 1 infrastructure:
 
 ### Prerequisites
 
-- A running management cluster (KCP, operators, identity will be deployed here)
+- A running management cluster (kcp, operators, identity will be deployed here)
 - A running workload cluster (tenant workloads will be scheduled here)
 - Networking between management and workload clusters
 - DNS and TLS infrastructure (cert-manager, external-dns)
@@ -63,7 +63,7 @@ All of these are provided by Layer 1.
                           | OIDC (Google, GitHub, ...)
                           | via Dex (OIDC)
                           v
-               KCP  (Multi-Tenant Control Plane)
+               kcp  (Multi-Tenant Control Plane)
     +------------+ +------------+ +------------+ +-----------+
     | Workspace  | | Workspace  | | Workspace  | |  System   |
     | tenant-a   | | tenant-b   | | tenant-c   | | (platform)|
@@ -96,13 +96,13 @@ All of these are provided by Layer 1.
 
 ---
 
-## 2. KCP -- The Multi-Tenant Control Plane
+## 2. kcp -- The Multi-Tenant Control Plane
 
-### What KCP Is
+### What kcp Is
 
-KCP is not another Kubernetes cluster. It is a multi-tenant API server that speaks the Kubernetes API but is purpose-built for offering APIs as services to many isolated tenants. Think of it as the "control plane only" part of Kubernetes, extended with first-class multi-tenancy.
+kcp is not another Kubernetes cluster. It is a multi-tenant API server that speaks the Kubernetes API but is purpose-built for offering APIs as services to many isolated tenants. Think of it as the "control plane only" part of Kubernetes, extended with first-class multi-tenancy.
 
-KCP provides:
+kcp provides:
 
 - **Workspaces** -- isolated logical clusters per tenant. Each workspace has its own CRDs, RBAC, secrets, and API surface. Tenants cannot see or discover each other's workspaces.
 - **APIExport / APIBinding** -- the mechanism by which the platform operator defines APIs centrally and makes them available to tenant workspaces. The platform exports APIs (Compute, VM, etc.) and tenant workspaces bind to them.
@@ -110,9 +110,9 @@ KCP provides:
 - **Front Proxy** -- a stateless proxy that routes API requests to the correct workspace and shard. All tenant traffic enters through the front proxy.
 - **ResourceQuota** -- per-workspace resource limits, preventing any single tenant from exhausting platform capacity.
 
-### Why KCP (and Not Something Else)
+### Why kcp (and Not Something Else)
 
-KCP was purpose-built for this exact use case. Here is how it compares to alternatives:
+kcp was purpose-built for this exact use case. Here is how it compares to alternatives:
 
 | Approach | Isolation | Cost per Tenant | API Customization | Fit for Cloud Platform |
 |----------|-----------|-----------------|-------------------|----------------------|
@@ -120,13 +120,13 @@ KCP was purpose-built for this exact use case. Here is how it compares to altern
 | **Capsule** | Namespace grouping + policy | Near zero | None | Poor -- still shared CRDs |
 | **vCluster** | Virtual apiserver per tenant | Medium (pod per tenant) | Full K8s | Overkill -- tenants don't need raw K8s |
 | **Kamaji** | Full cluster per tenant | High | Full K8s | Overkill -- expensive at scale |
-| **KCP** | **Logical cluster (workspace)** | **Near zero** | **Full (APIExport)** | **Ideal** |
+| **kcp** | **Logical cluster (workspace)** | **Near zero** | **Full (APIExport)** | **Ideal** |
 
-KCP gives the API customization and isolation of virtual clusters at the cost profile of namespaces. Tenants get a workspace that looks like their own cluster with only the APIs the platform chooses to expose -- no raw Kubernetes primitives leaking through.
+kcp gives the API customization and isolation of virtual clusters at the cost profile of namespaces. Tenants get a workspace that looks like their own cluster with only the APIs the platform chooses to expose -- no raw Kubernetes primitives leaking through.
 
 ### Tenant Interaction Model
 
-Tenants never see or interact with the backend Kubernetes clusters. Their entire world is a KCP workspace:
+Tenants never see or interact with the backend Kubernetes clusters. Their entire world is a kcp workspace:
 
 ```
 $ kubectl --kubeconfig=tenant.kubeconfig get apiresources
@@ -151,13 +151,13 @@ When the cloud operator needs to reconcile resources across all tenants, it conn
 
 ### Deployment
 
-KCP runs on the management cluster, deployed via **kcp-operator**:
+kcp runs on the management cluster, deployed via **kcp-operator**:
 
 - **kcp-server** -- the multi-tenant API server (one or more replicas)
 - **kcp-front-proxy** -- stateless request router
-- **etcd** -- KCP's datastore (dedicated or shared with the management cluster)
+- **etcd** -- kcp's datastore (dedicated or shared with the management cluster)
 
-For a small deployment (2-3 racks), a single KCP shard is sufficient. KCP supports sharding for scale-out, with the front proxy routing transparently across shards.
+For a small deployment (2-3 racks), a single kcp shard is sufficient. kcp supports sharding for scale-out, with the front proxy routing transparently across shards.
 
 > Reference: `deploy/kcp/`
 
@@ -167,7 +167,7 @@ For a small deployment (2-3 racks), a single KCP shard is sufficient. KCP suppor
 
 ### OIDC Authentication
 
-The platform authenticates all users via OIDC. KCP is configured with `--oidc-issuer-url` pointing to the identity provider. Users authenticate through the IdP and receive a JWT that KCP trusts.
+The platform authenticates all users via OIDC. kcp is configured with `--oidc-issuer-url` pointing to the identity provider. Users authenticate through the IdP and receive a JWT that kcp trusts.
 
 Supported external identity providers (federated through the platform IdP):
 
@@ -178,12 +178,12 @@ Supported external identity providers (federated through the platform IdP):
 
 ### Dex -- The Default Identity Broker
 
-Dex is the default OIDC broker for Layer 2. It federates external identity providers (Google, GitHub) into a single OIDC issuer that KCP trusts.
+Dex is the default OIDC broker for Layer 2. It federates external identity providers (Google, GitHub) into a single OIDC issuer that kcp trusts.
 
 **Why Dex:**
 
 - **Apache 2.0** -- fully permissive, no copyleft
-- **Go** -- same language as KCP and the rest of the stack
+- **Go** -- same language as kcp and the rest of the stack
 - **~50MB RAM** -- smallest footprint of any OIDC broker
 - **Simple** -- static YAML config, no database required
 - **Proven** -- used by Kubernetes itself, ArgoCD, and many CNCF projects
@@ -193,27 +193,27 @@ Dex is a pure broker -- it authenticates users via upstream providers and issues
 
 ### Upgrading to Zitadel (Layer 3)
 
-When you need user management, API keys (PATs), device authorization for CLI, or org/team hierarchy, upgrade to **Zitadel** (see `03-production.md`). The swap is seamless -- only `--oidc-issuer-url` changes on KCP.
+When you need user management, API keys (PATs), device authorization for CLI, or org/team hierarchy, upgrade to **Zitadel** (see `03-production.md`). The swap is seamless -- only `--oidc-issuer-url` changes on kcp.
 
 ### Interface-Based Design
 
 The identity provider is behind a well-defined OIDC interface. To swap providers, the replacement must:
 
 1. Issue JWTs with the expected claims (`sub`, `email`, `groups`)
-2. Expose a JWKS endpoint for KCP token verification
+2. Expose a JWKS endpoint for kcp token verification
 3. Support the authorization code flow (for web console)
 
-KCP's `--oidc-issuer-url` is the only configuration point that changes. The rest of the platform is unaware of which IdP is running.
+kcp's `--oidc-issuer-url` is the only configuration point that changes. The rest of the platform is unaware of which IdP is running.
 
 ### Authentication Flows
 
 **Web Console (authorization code flow):**
 
 ```
-Browser --> Console --> Dex --> Google/GitHub --> JWT --> KCP
+Browser --> Console --> Dex --> Google/GitHub --> JWT --> kcp
 ```
 
-The console redirects to Dex, Dex redirects to the upstream provider (Google/GitHub), user authenticates, Dex issues a JWT, console uses it for KCP API calls.
+The console redirects to Dex, Dex redirects to the upstream provider (Google/GitHub), user authenticates, Dex issues a JWT, console uses it for kcp API calls.
 
 **CLI (token-based):**
 
@@ -227,7 +227,7 @@ The CLI opens a browser for the OIDC authorization code flow with a local callba
 
 **Programmatic:**
 
-For CI/CD and automation in Layer 2, use static tokens or service account kubeconfigs generated by KCP. For proper machine-to-machine auth with PATs, upgrade to Zitadel (Layer 3).
+For CI/CD and automation in Layer 2, use static tokens or service account kubeconfigs generated by kcp. For proper machine-to-machine auth with PATs, upgrade to Zitadel (Layer 3).
 
 ### License
 
@@ -246,7 +246,7 @@ When a new user signs up, the platform automatically provisions their environmen
          |
          v
 2. Onboarding controller detects new user
-   +-- Creates KCP workspace (tenant-{id})
+   +-- Creates kcp workspace (tenant-{id})
    +-- Binds RBAC (user = workspace admin)
    +-- Creates APIBindings (compute, storage, network, ai)
    +-- Sets ResourceQuota (default limits)
@@ -268,9 +268,9 @@ The tenant sees only their workspace. From their perspective, it looks like a Ku
 
 Isolation operates at two levels:
 
-**API Layer (KCP workspaces):**
+**API Layer (kcp workspaces):**
 
-- Each tenant gets a dedicated KCP workspace (logical cluster)
+- Each tenant gets a dedicated kcp workspace (logical cluster)
 - Independent CRDs, RBAC, secrets per workspace
 - Tenants cannot discover each other's workspaces
 - ResourceQuota limits per workspace
@@ -284,7 +284,7 @@ Isolation operates at two levels:
 - gVisor RuntimeClass for non-GPU workloads (optional, stronger isolation)
 - Whole GPU allocation (no sharing in v1)
 
-Tenants never interact with the workload layer directly. They only see their KCP workspace. The cloud operator creates and manages workload-layer resources on behalf of tenants.
+Tenants never interact with the workload layer directly. They only see their kcp workspace. The cloud operator creates and manages workload-layer resources on behalf of tenants.
 
 ### Tenant Network Isolation
 
@@ -310,7 +310,7 @@ Billing-based tier transitions (pay-as-you-go, prepaid credits, automatic upgrad
 
 Every platform API follows the same pattern:
 
-1. **APIResourceSchema** -- defines the resource type (like a CRD, but KCP-native)
+1. **APIResourceSchema** -- defines the resource type (like a CRD, but kcp-native)
 2. **APIExport** -- makes the API available for tenant workspaces to bind
 3. **Cloud Operator** -- watches the virtual workspace, reconciles tenant resources against the workload cluster
 
@@ -482,11 +482,11 @@ The cloud operator is a single binary that handles all platform API types. It ru
 |  PublicIP ----------------> Service (LB)       |
 |                                                |
 |  Each reconciler:                              |
-|  1. Watches KCP virtual workspace              |
+|  1. Watches kcp virtual workspace              |
 |  2. Creates workloads in tenant namespace      |
 |     on workload cluster                        |
 |  3. Applies NetworkPolicy for isolation        |
-|  4. Updates status back in KCP                 |
+|  4. Updates status back in kcp                 |
 +-----------------------------------------------+
 ```
 
@@ -494,16 +494,16 @@ The cloud operator is a single binary that handles all platform API types. It ru
 
 Every reconciler follows the same lifecycle:
 
-1. **WATCH** -- Connect to KCP virtual workspace, watch for create/update/delete of its resource type.
+1. **WATCH** -- Connect to kcp virtual workspace, watch for create/update/delete of its resource type.
 2. **MAP** -- Determine the tenant namespace on the workload cluster (`tenant-{workspace-id}`).
 3. **ENSURE** -- Ensure the tenant namespace exists. Create it if missing. Apply default NetworkPolicy.
-4. **CREATE** -- Create the backend resource (Pod, VM, Job, PVC, etc.) in the tenant namespace. Labels link back to the KCP resource.
-5. **STATUS** -- Watch the backend resource for status changes and write status back to KCP via the virtual workspace.
-6. **DELETE** -- When the tenant deletes the KCP resource, delete the backend resource and clean up.
+4. **CREATE** -- Create the backend resource (Pod, VM, Job, PVC, etc.) in the tenant namespace. Labels link back to the kcp resource.
+5. **STATUS** -- Watch the backend resource for status changes and write status back to kcp via the virtual workspace.
+6. **DELETE** -- When the tenant deletes the kcp resource, delete the backend resource and clean up.
 
 ### Extensibility
 
-Adding a new resource type requires: (1) define a new `APIResourceSchema` in KCP, (2) add it to the platform's `APIExport`, (3) implement a new reconciler in the cloud operator, (4) bind the updated APIExport to tenant workspaces. Examples: managed PostgreSQL, DNS zones, load balancers, managed Kubernetes clusters (via Kamaji).
+Adding a new resource type requires: (1) define a new `APIResourceSchema` in kcp, (2) add it to the platform's `APIExport`, (3) implement a new reconciler in the cloud operator, (4) bind the updated APIExport to tenant workspaces. Examples: managed PostgreSQL, DNS zones, load balancers, managed Kubernetes clusters (via Kamaji).
 
 ### Deployment Note
 
@@ -523,7 +523,7 @@ The onboarding controller runs on the management cluster and watches for new use
 New OIDC user detected
          |
          v
-Create KCP workspace (tenant-{user-id})
+Create kcp workspace (tenant-{user-id})
          |
          v
 Bind platform APIExports to workspace
@@ -548,10 +548,10 @@ For each new tenant:
 
 | Resource | Where | Purpose |
 |----------|-------|---------|
-| Workspace | KCP | Isolated logical cluster for the tenant |
-| ClusterRoleBinding | KCP workspace | Grants user admin access to their workspace |
-| APIBinding (x4) | KCP workspace | Makes platform APIs available |
-| ResourceQuota | KCP workspace | Default resource limits |
+| Workspace | kcp | Isolated logical cluster for the tenant |
+| ClusterRoleBinding | kcp workspace | Grants user admin access to their workspace |
+| APIBinding (x4) | kcp workspace | Makes platform APIs available |
+| ResourceQuota | kcp workspace | Default resource limits |
 
 The onboarding controller does not create anything on the workload cluster. Workload-cluster resources (namespaces, NetworkPolicies) are created on-demand by the cloud operator when the tenant creates their first resource.
 
@@ -596,7 +596,7 @@ Tokens are stored locally (`~/.config/cloud/tokens.json`) and refreshed automati
 
 ### SSH Tunneling
 
-The CLI provides SSH access to VMs without requiring a public IP. Under the hood: the CLI authenticates with KCP, opens a gRPC stream to a tunnel service on the management cluster, which connects to the VM's SSH port in the workload cluster. All traffic is authenticated and routed through the platform -- no public IP needed.
+The CLI provides SSH access to VMs without requiring a public IP. Under the hood: the CLI authenticates with kcp, opens a gRPC stream to a tunnel service on the management cluster, which connects to the VM's SSH port in the workload cluster. All traffic is authenticated and routed through the platform -- no public IP needed.
 
 ```
 $ cloud ssh my-vm
@@ -606,7 +606,7 @@ user@my-vm:~$
 
 ### kubectl Compatibility
 
-The CLI generates standard kubeconfig files pointing to the tenant's KCP workspace:
+The CLI generates standard kubeconfig files pointing to the tenant's kcp workspace:
 
 ```
 $ cloud kubeconfig > ~/.kube/config
@@ -641,7 +641,7 @@ The web console is a multi-tenant dashboard for tenants who prefer a GUI:
 
 The console is a single-page application (SPA) that talks directly to:
 
-- **KCP** -- for resource CRUD (standard Kubernetes API with JWT auth)
+- **kcp** -- for resource CRUD (standard Kubernetes API with JWT auth)
 - **Dex** -- for authentication (OIDC authorization code flow)
 
 No backend-for-frontend is needed. The console is a static site that uses the existing APIs. It can be served from any static hosting or as a container on the management cluster.
@@ -718,8 +718,8 @@ Tenant-facing metrics are exposed through the web console status page, not Grafa
 
 | Component | Role | License | CNCF Status |
 |-----------|------|---------|-------------|
-| **KCP** | Multi-tenant control plane | Apache 2.0 | -- |
-| **kcp-operator** | KCP deployment and lifecycle | Apache 2.0 | -- |
+| **kcp** | Multi-tenant control plane | Apache 2.0 | -- |
+| **kcp-operator** | kcp deployment and lifecycle | Apache 2.0 | -- |
 | **Dex** | OIDC broker | Apache 2.0 | -- |
 | **Cloud Operator** | Reconciles all platform API types | Apache 2.0 | -- |
 | **Onboarding Controller** | Provisions tenant workspaces | Apache 2.0 | -- |
@@ -744,7 +744,7 @@ No BSL, SSPL, or proprietary licenses in the stack. Grafana (AGPL-3.0) is the on
 The demo walks through the complete tenant experience on Layer 2:
 
 ```
-1. DEPLOY    -- Deploy KCP, Dex, Cloud Operator, Console on
+1. DEPLOY    -- Deploy kcp, Dex, Cloud Operator, Console on
                 management cluster. Platform APIs registered.
 
 2. LOGIN     -- User authenticates via CLI or Console.

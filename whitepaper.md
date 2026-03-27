@@ -14,7 +14,7 @@
 2. [Motivation and Goals](#2-motivation-and-goals)
 3. [Design Principles](#3-design-principles)
 4. [Architecture Overview](#4-architecture-overview)
-5. [Control Plane — KCP](#5-control-plane--kcp)
+5. [Control Plane — kcp](#5-control-plane--kcp)
 6. [Identity and Access — Zitadel](#6-identity-and-access--zitadel)
 7. [Bare Metal Provisioning — Metal3 + Flatcar](#7-bare-metal-provisioning--metal3--flatcar)
 8. [Kubernetes Layer](#8-kubernetes-layer)
@@ -40,14 +40,14 @@
 
 This document presents a reference architecture for building a sovereign, multi-tenant cloud platform on commodity hardware (2-3 racks). It targets small infrastructure providers who want to offer cloud services — compute, GPU/accelerator workloads, VMs, and extensible platform services — to external users with minimal operational overhead.
 
-The architecture is built around **KCP** (Kubernetes-like Control Plane) as the multi-tenant API core, exposing high-level cloud APIs to tenants while hiding the complexity of the underlying infrastructure. Tenants interact with the platform through a web console and custom CLI, authenticating via standard OIDC providers (Google, GitHub, etc.). Usage is metered and billed automatically.
+The architecture is built around **kcp** (Kubernetes-like Control Plane) as the multi-tenant API core, exposing high-level cloud APIs to tenants while hiding the complexity of the underlying infrastructure. Tenants interact with the platform through a web console and custom CLI, authenticating via standard OIDC providers (Google, GitHub, etc.). Usage is metered and billed automatically.
 
 Every component is open source, CNCF-aligned where possible, and self-hostable. External dependencies (OIDC providers, payment processors) are behind swappable interfaces, allowing providers to choose sovereign alternatives.
 
 **Key characteristics:**
 
 - **API Platform model** — tenants consume high-level cloud APIs (Compute, VM, GPU, Storage), not raw Kubernetes
-- **KCP at the core** — multi-tenant workspaces with full API isolation, RBAC, and quotas
+- **kcp at the core** — multi-tenant workspaces with full API isolation, RBAC, and quotas
 - **Interface-based** — identity, billing, payment, and infrastructure components are swappable
 - **Bare metal native** — Metal3 for hardware lifecycle, Flatcar for immutable OS
 - **GPU-ready** — NVIDIA GPU Operator with extensible sharing models
@@ -68,7 +68,7 @@ Both paths are expensive and slow.
 
 ### The Opportunity
 
-The Kubernetes ecosystem has matured to the point where most building blocks for a cloud platform exist as open-source, composable components. KCP extends this by providing a multi-tenant control plane purpose-built for offering APIs as services. By combining these components with a clear reference architecture, small providers can stand up a functional cloud platform with a minimal team.
+The Kubernetes ecosystem has matured to the point where most building blocks for a cloud platform exist as open-source, composable components. kcp extends this by providing a multi-tenant control plane purpose-built for offering APIs as services. By combining these components with a clear reference architecture, small providers can stand up a functional cloud platform with a minimal team.
 
 ### Goals
 
@@ -112,7 +112,7 @@ The Kubernetes ecosystem has matured to the point where most building blocks for
                            │ OIDC (Google, GitHub, ...)
                            │ via Zitadel
 ┌──────────────────────────▼──────────────────────────────────────┐
-│                    KCP  (Multi-Tenant Control Plane)              │
+│                    kcp  (Multi-Tenant Control Plane)              │
 │                                                                   │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────┐  │
 │  │ Workspace  │ │ Workspace  │ │ Workspace  │ │   System     │  │
@@ -130,7 +130,7 @@ The Kubernetes ecosystem has matured to the point where most building blocks for
 ┌──────────────────────────▼──────────────────────────────────────┐
 │                  MANAGEMENT CLUSTER                               │
 │                                                                   │
-│  KCP Server · Zitadel · OpenMeter · Prometheus · Grafana         │
+│  kcp Server · Zitadel · OpenMeter · Prometheus · Grafana         │
 │  Billing Controller · Quota Controller · Service Operators        │
 │  Metal3 + Cluster API (production) · cert-manager                │
 └──────────────────────────┬──────────────────────────────────────┘
@@ -166,28 +166,28 @@ The Kubernetes ecosystem has matured to the point where most building blocks for
 ### Data Flow
 
 ```
-Tenant ──OIDC──▶ Zitadel ──JWT──▶ KCP (workspace access)
+Tenant ──OIDC──▶ Zitadel ──JWT──▶ kcp (workspace access)
                                         │
-Tenant ──kubectl/CLI──▶ KCP workspace ──▶ creates Compute/VM/GPU CRs
+Tenant ──kubectl/CLI──▶ kcp workspace ──▶ creates Compute/VM/GPU CRs
                                         │
 Operator (via virtual workspace) ◀──────┘ watches CRs
     │
     ├──▶ Creates pods/VMs in workload cluster (tenant namespace)
-    ├──▶ Returns status (URL, SSH endpoint, kubeconfig) to KCP
+    ├──▶ Returns status (URL, SSH endpoint, kubeconfig) to kcp
     └──▶ OpenMeter collector scrapes usage metrics
 
 OpenMeter ──aggregates──▶ usage records ──▶ invoices ──▶ Stripe
                                                           │
-KCP Quota Controller ◀── checks entitlements ◀── OpenMeter API
+kcp Quota Controller ◀── checks entitlements ◀── OpenMeter API
 ```
 
 ---
 
-## 5. Control Plane — KCP
+## 5. Control Plane — kcp
 
 ### Role
 
-KCP is the multi-tenant control plane — the single system that all tenants interact with. It provides:
+kcp is the multi-tenant control plane — the single system that all tenants interact with. It provides:
 
 - **Workspaces** — isolated logical clusters per tenant with independent CRDs, RBAC, secrets, and API surfaces
 - **APIExport / APIBinding** — service providers (platform operators) define APIs centrally, tenants bind to them in their workspaces
@@ -195,9 +195,9 @@ KCP is the multi-tenant control plane — the single system that all tenants int
 - **Front Proxy** — stateless proxy routing requests to the correct workspace/shard
 - **ResourceQuota** — per-workspace resource limits
 
-### Why KCP
+### Why kcp
 
-KCP was purpose-built for this use case — offering APIs as services to many isolated tenants. Compared to alternatives:
+kcp was purpose-built for this use case — offering APIs as services to many isolated tenants. Compared to alternatives:
 
 | Approach | Isolation | Cost per tenant | API customization | Fit |
 |----------|-----------|----------------|-------------------|-----|
@@ -205,13 +205,13 @@ KCP was purpose-built for this use case — offering APIs as services to many is
 | Capsule | Namespace grouping + policy | Near zero | None | Poor |
 | vCluster | Virtual apiserver per tenant | Medium (pod per tenant) | Full K8s | Overkill |
 | Kamaji | Full cluster per tenant | High | Full K8s | Overkill |
-| **KCP** | **Logical cluster (workspace)** | **Near zero** | **Full (APIExport)** | **Ideal** |
+| **kcp** | **Logical cluster (workspace)** | **Near zero** | **Full (APIExport)** | **Ideal** |
 
-KCP gives us the API customization and isolation of virtual clusters at the cost profile of namespaces.
+kcp gives us the API customization and isolation of virtual clusters at the cost profile of namespaces.
 
 ### Tenant Interaction Model
 
-Tenants never see or interact with the backend Kubernetes clusters. Their entire world is a KCP workspace:
+Tenants never see or interact with the backend Kubernetes clusters. Their entire world is a kcp workspace:
 
 ```
 $ kubectl --kubeconfig=tenant.kubeconfig get apiresources
@@ -249,21 +249,21 @@ status:
   tunnelEndpoint: grpc://tunnel.cloud.example.com/tenant-a/my-analysis
 ```
 
-### KCP Deployment
+### kcp Deployment
 
-KCP runs on the management cluster as a set of pods:
+kcp runs on the management cluster as a set of pods:
 
 - **kcp-server** — the multi-tenant API server (one or more replicas)
 - **kcp-front-proxy** — stateless request router
-- **etcd** — KCP's datastore (can share the management cluster's etcd or run dedicated)
+- **etcd** — kcp's datastore (can share the management cluster's etcd or run dedicated)
 
-For high availability, KCP supports **sharding** — running multiple kcp-server instances with separate etcd stores, with the front proxy routing transparently. For a 2-3 rack deployment, a single shard is typically sufficient. The reference architecture documents sharding as a scale-out option.
+For high availability, kcp supports **sharding** — running multiple kcp-server instances with separate etcd stores, with the front proxy routing transparently. For a 2-3 rack deployment, a single shard is typically sufficient. The reference architecture documents sharding as a scale-out option.
 
 ### API Design Pattern
 
 Platform services follow a consistent pattern:
 
-1. **Define the API** — create an `APIResourceSchema` (similar to a CRD but KCP-native)
+1. **Define the API** — create an `APIResourceSchema` (similar to a CRD but kcp-native)
 2. **Export the API** — create an `APIExport` in the platform workspace, referencing the schema
 3. **Build the operator** — a controller watching the virtual workspace, reconciling tenant resources against the backend cluster
 4. **Bind to tenants** — when a tenant workspace is created, automatically bind the platform's APIExports
@@ -279,7 +279,7 @@ This pattern is repeatable for any service type. Adding a new service (e.g., man
 Zitadel serves as the identity provider and OIDC broker. It:
 
 - Federates external OIDC providers (Google, GitHub, corporate IdPs)
-- Issues JWT tokens trusted by KCP (`--oidc-issuer-url` flag)
+- Issues JWT tokens trusted by kcp (`--oidc-issuer-url` flag)
 - Manages user profiles, organizations, and machine users
 - Provides device authorization grant for CLI authentication
 - Provides personal access tokens (PATs) for programmatic access
@@ -315,25 +315,25 @@ Platform ──trusts──▶ OIDC Issuer (Zitadel by default)
 To swap Zitadel for another provider (e.g., Keycloak, Authentik, corporate ADFS), the provider must:
 1. Issue JWTs with the expected claims
 2. Support the device authorization grant (for CLI)
-3. Expose a JWKS endpoint for KCP token verification
+3. Expose a JWKS endpoint for kcp token verification
 
-KCP's `--oidc-issuer-url` is the only configuration point that changes.
+kcp's `--oidc-issuer-url` is the only configuration point that changes.
 
 ### Authentication Flows
 
 **Web Console:**
 ```
-Browser → Console → Zitadel (authorization code flow) → JWT → KCP
+Browser → Console → Zitadel (authorization code flow) → JWT → kcp
 ```
 
 **Custom CLI:**
 ```
-CLI → Zitadel (device authorization grant) → User approves in browser → JWT → KCP
+CLI → Zitadel (device authorization grant) → User approves in browser → JWT → kcp
 ```
 
 **Programmatic (CI/CD, scripts):**
 ```
-Machine user → Zitadel PAT or client credentials → JWT → KCP
+Machine user → Zitadel PAT or client credentials → JWT → kcp
 ```
 
 ### License
@@ -457,7 +457,7 @@ The platform operates two logical cluster tiers:
 ┌─────────────────────────────┐     ┌─────────────────────────────┐
 │    MANAGEMENT CLUSTER        │     │    WORKLOAD CLUSTER(s)       │
 │                              │     │                              │
-│  KCP (control plane)         │     │  Tenant workloads            │
+│  kcp (control plane)         │     │  Tenant workloads            │
 │  Zitadel (identity)          │     │  (pods, VMs, GPU jobs)       │
 │  OpenMeter (billing)         │     │                              │
 │  Prometheus + Grafana        │     │  Cilium (CNI + ingress)      │
@@ -487,9 +487,9 @@ In production, the workload tier can be multiple clusters (e.g., per-rack, per-G
 Tenant isolation operates at two levels:
 
 ```
-Layer 1: API Isolation (KCP)
+Layer 1: API Isolation (kcp)
 ─────────────────────────────────────────────
-- Each tenant gets a KCP workspace
+- Each tenant gets a kcp workspace
 - Independent CRDs, RBAC, secrets
 - Tenants cannot discover each other
 - Full API-level isolation
@@ -504,7 +504,7 @@ Layer 2: Workload Isolation (Backend Cluster)
 - Whole GPU allocation (no sharing in v1)
 ```
 
-Tenants never interact with Layer 2 directly. They only see their KCP workspace (Layer 1). The platform operators create and manage Layer 2 resources on the tenants' behalf.
+Tenants never interact with Layer 2 directly. They only see their kcp workspace (Layer 1). The platform operators create and manage Layer 2 resources on the tenants' behalf.
 
 ### Workspace Lifecycle
 
@@ -513,7 +513,7 @@ Tenants never interact with Layer 2 directly. They only see their KCP workspace 
          │
          ▼
 2. Onboarding controller detects new user
-   ├── Creates KCP workspace (tenant-{id})
+   ├── Creates kcp workspace (tenant-{id})
    ├── Binds RBAC (user = workspace admin)
    ├── Creates APIBindings (compute, storage, network, ai)
    ├── Sets ResourceQuota (free tier defaults)
@@ -546,7 +546,7 @@ Tiers are implemented as configuration on the workspace and OpenMeter, not as se
 
 Tier transitions are handled by the billing controller:
 - Free → Pay-as-you-go: user adds payment method
-- Quota enforcement: KCP admission webhook checks OpenMeter entitlements before allowing resource creation
+- Quota enforcement: kcp admission webhook checks OpenMeter entitlements before allowing resource creation
 - Credit exhaustion: workspace enters read-only mode (existing workloads continue, no new ones)
 
 ---
@@ -559,7 +559,7 @@ Compute services follow the operator pattern:
 
 ```
 ┌─────────────────────────┐
-│  Tenant KCP Workspace    │
+│  Tenant kcp Workspace    │
 │                          │
 │  Compute CR ──────────┐  │
 │  VM CR ───────────────┤  │
@@ -581,7 +581,7 @@ Compute services follow the operator pattern:
 │  1. Watches virtual workspace          │
 │  2. Creates resources in workload      │
 │     cluster (tenant namespace)         │
-│  3. Updates status back in KCP         │
+│  3. Updates status back in kcp         │
 │  4. Emits usage events to OpenMeter    │
 └───────────────────────────────────────┘
 ```
@@ -701,7 +701,7 @@ This is the simplest model with the strongest isolation. No GPU sharing means no
 ### Scheduling Flow
 
 ```
-1. Tenant creates GPUJob in KCP workspace
+1. Tenant creates GPUJob in kcp workspace
 2. GPU operator creates Job in workload cluster
 3. Kueue queues the job, checks tenant quota
 4. When resources available, Kueue admits the job
@@ -820,7 +820,7 @@ Combined with **cert-manager** for automated Let's Encrypt TLS certificates and 
    ```
    No public IP needed. Most secure.
 
-2. **Public IP (opt-in)** — tenant requests a `PublicIP` resource in KCP. MetalLB allocates an IP from the provider's pool. SSH directly to the assigned IP. Billed as a metered resource.
+2. **Public IP (opt-in)** — tenant requests a `PublicIP` resource in kcp. MetalLB allocates an IP from the provider's pool. SSH directly to the assigned IP. Billed as a metered resource.
 
 ---
 
@@ -862,7 +862,7 @@ The reference architecture uses Rook-Ceph (Apache 2.0, CNCF Graduated) for unifi
 
 ### Per-Tenant Storage
 
-Storage services are exposed as KCP APIs:
+Storage services are exposed as kcp APIs:
 
 ```yaml
 apiVersion: storage.cloud.example/v1
@@ -972,10 +972,10 @@ OpenMeter supports all required billing models, configurable per tenant:
 
 ### Quota Enforcement
 
-A **KCP admission webhook** (custom controller) checks OpenMeter's entitlements API before allowing resource creation:
+A **kcp admission webhook** (custom controller) checks OpenMeter's entitlements API before allowing resource creation:
 
 ```
-Tenant creates Notebook → KCP admission webhook
+Tenant creates Notebook → kcp admission webhook
   → Queries OpenMeter: "Does tenant-a have GPU entitlement?"
   → If yes: allow
   → If no (free tier, credits exhausted): reject with clear error
@@ -1077,7 +1077,7 @@ Tokens are cached locally and refreshed automatically.
 $ cloud ssh my-vm
 
 # Under the hood:
-# 1. CLI authenticates with KCP
+# 1. CLI authenticates with kcp
 # 2. CLI opens gRPC stream to tunnel service
 # 3. Tunnel service connects to VM's SSH port in workload cluster
 # 4. CLI pipes local stdin/stdout through the tunnel
@@ -1087,7 +1087,7 @@ No public IP needed. The tunnel service runs on the management cluster and has n
 
 ### kubectl Compatibility
 
-The CLI generates standard kubeconfig files pointing to the tenant's KCP workspace:
+The CLI generates standard kubeconfig files pointing to the tenant's kcp workspace:
 
 ```
 $ cloud kubeconfig > ~/.kube/config
@@ -1114,7 +1114,7 @@ The web console is a multi-tenant dashboard for tenants who prefer a GUI:
 
 The console is a single-page application that talks directly to:
 
-- **KCP** — for resource CRUD (via standard Kubernetes API with JWT auth)
+- **kcp** — for resource CRUD (via standard Kubernetes API with JWT auth)
 - **Zitadel** — for authentication (OIDC authorization code flow)
 - **OpenMeter** — for usage and billing data (via API)
 
@@ -1127,14 +1127,14 @@ No backend-for-frontend needed — the console is a static site that uses the ex
 ### Authentication Chain
 
 ```
-User → Zitadel (OIDC) → JWT → KCP Front Proxy → Workspace
+User → Zitadel (OIDC) → JWT → kcp Front Proxy → Workspace
 ```
 
-KCP validates JWTs using Zitadel's JWKS endpoint. The JWT `sub` claim maps to a KCP user, `groups` claim maps to RBAC groups.
+kcp validates JWTs using Zitadel's JWKS endpoint. The JWT `sub` claim maps to a kcp user, `groups` claim maps to RBAC groups.
 
 ### Authorization Chain
 
-KCP's built-in multi-layer authorization:
+kcp's built-in multi-layer authorization:
 
 1. **Workspace Access** — user must have `access` verb on the workspace
 2. **Required Groups** — workspace can require specific group membership
@@ -1146,7 +1146,7 @@ KCP's built-in multi-layer authorization:
 
 | Boundary | Mechanism |
 |----------|-----------|
-| API isolation | KCP workspaces (logical clusters) |
+| API isolation | kcp workspaces (logical clusters) |
 | Network isolation | Cilium NetworkPolicy (default deny cross-tenant) |
 | Compute isolation | Separate namespaces, ResourceQuota |
 | GPU isolation | Whole GPU allocation (no sharing) |
@@ -1166,7 +1166,7 @@ KCP's built-in multi-layer authorization:
 - All container images from trusted registries (or provider-hosted mirror)
 - Flatcar's immutable OS reduces host attack surface
 - No SSH access to nodes (Talos-style operational model recommended)
-- etcd encryption at rest for KCP and workload cluster secrets
+- etcd encryption at rest for kcp and workload cluster secrets
 
 ---
 
@@ -1176,7 +1176,7 @@ KCP's built-in multi-layer authorization:
 
 | Component | Role | License | CNCF Status | Language |
 |-----------|------|---------|-------------|----------|
-| **KCP** | Multi-tenant control plane | Apache 2.0 | — | Go |
+| **kcp** | Multi-tenant control plane | Apache 2.0 | — | Go |
 | **Zitadel** | Identity / OIDC | AGPL-3.0 | — | Go |
 | **OpenMeter** | Metering + billing | Apache 2.0 | — | Go |
 | **Kubernetes** (kubeadm) | Workload orchestration | Apache 2.0 | Graduated | Go |
@@ -1228,7 +1228,7 @@ KCP's built-in multi-layer authorization:
 All components use OSI-approved open source licenses:
 
 ```
-Apache 2.0 (permissive):  KCP, Metal3, Flatcar, Cilium, Kubernetes,
+Apache 2.0 (permissive):  kcp, Metal3, Flatcar, Cilium, Kubernetes,
                            Rook-Ceph, OpenMeter, Kueue, KubeVirt,
                            Prometheus, VictoriaMetrics, cert-manager,
                            NVIDIA GPU Operator, gVisor, Cluster API
@@ -1270,7 +1270,7 @@ This reference architecture is an **independent, CNCF-aligned** project. It ackn
 
 SCS is a German government-funded reference implementation based on OpenStack + Kubernetes. Our architecture differs in philosophy:
 
-- SCS uses OpenStack for IaaS; we use Kubernetes-native APIs (KCP + operators)
+- SCS uses OpenStack for IaaS; we use Kubernetes-native APIs (kcp + operators)
 - SCS targets full cloud provider compliance; we target minimal viable platform
 - Both share Kubernetes for CaaS and CNCF ecosystem values
 
@@ -1300,7 +1300,7 @@ The EU's Important Project of Common European Interest on Cloud Infrastructure a
 
 - Tenants can provision managed Kubernetes clusters
 - **Kamaji** (Apache 2.0) for hosted control planes
-- **KCP Workspace Mounts** to expose provisioned clusters as sub-workspaces
+- **kcp Workspace Mounts** to expose provisioned clusters as sub-workspaces
 - Tenant gets a kubeconfig to their own cluster
 
 ### Multi-Node GPU Training (v2)
@@ -1332,7 +1332,7 @@ The EU's Important Project of Common European Interest on Cloud Infrastructure a
 
 ### Federation (v3)
 
-- Multiple sovereign cloud instances federating via KCP sharding
+- Multiple sovereign cloud instances federating via kcp sharding
 - Cross-site workload placement
 - Federated identity via Zitadel organization model
 - Alignment with IPCEI-CIS federation patterns
@@ -1346,7 +1346,7 @@ This section records the architectural decisions made during design and the rati
 | # | Decision | Choice | Alternatives Considered | Rationale |
 |---|----------|--------|------------------------|-----------|
 | D01 | Tenant abstraction | API Platform (high-level CRDs) | K8s-as-a-Service, Hybrid | Tenants don't need raw K8s. High-level APIs enable provider control and service evolution. |
-| D02 | Control plane | KCP (only control plane, tenants get access handles) | KCP as orchestrator + direct access | Clean separation. Tenants see only KCP workspace APIs. |
+| D02 | Control plane | kcp (only control plane, tenants get access handles) | kcp as orchestrator + direct access | Clean separation. Tenants see only kcp workspace APIs. |
 | D03 | Sovereignty model | Self-hosted + swappable interfaces | Fully self-hosted, compliance-aligned | Pragmatic. Default to self-hosted, allow external services (OIDC, Stripe) behind interfaces. |
 | D04 | Bare metal provisioning | Metal3 | Tinkerbell, Sidero, MAAS | CNCF Incubating, Apache 2.0, 57 orgs, EU involvement (Ericsson). Sidero deprecated. |
 | D05 | OS | Flatcar Container Linux | Talos, Ubuntu, Kairos | CNCF Incubating, Apache 2.0, immutable, Metal3-compatible, EU origin (Kinvolk/Berlin). |
@@ -1357,9 +1357,9 @@ This section records the architectural decisions made during design and the rati
 | D10 | GPU sharing (v1) | Whole GPU only | MIG, HAMi, time-slicing | Simplest. Strongest isolation. Compatible with gVisor. GPU sharing deferred to v2. |
 | D11 | GPU scheduling | Kueue | Volcano, Run:ai | Apache 2.0, Kubernetes SIG, emerging standard. Run:ai is commercial. |
 | D12 | Multi-node training | Documented, v1 single-node | Full InfiniBand support | Demo hardware won't have InfiniBand. Document for production deployments. |
-| D13 | Tenant isolation (API) | KCP workspaces | vCluster, Capsule, Kamaji | KCP gives API isolation at namespace cost. vCluster is overkill when tenants don't need raw K8s. |
+| D13 | Tenant isolation (API) | kcp workspaces | vCluster, Capsule, Kamaji | kcp gives API isolation at namespace cost. vCluster is overkill when tenants don't need raw K8s. |
 | D14 | Tenant isolation (workload) | Namespace + Cilium NetworkPolicy | Dedicated nodes, runtime sandboxing | Sufficient for v1. gVisor optional for non-GPU. Document stronger options. |
-| D15 | Tenant discovery | Full isolation (no discovery) | Limited directory | KCP workspaces provide this by default. |
+| D15 | Tenant discovery | Full isolation (no discovery) | Limited directory | kcp workspaces provide this by default. |
 | D16 | Noisy neighbor (v1) | ResourceQuota + whole GPU + Cilium | CPU pinning, NUMA, bandwidth QoS | Sufficient for v1. Advanced protections documented for future. |
 | D17 | Identity provider | Zitadel | Dex, Keycloak, Kanidm, Authentik | Go, API-first, multi-tenant, Swiss/EU, lightweight. Supports device auth for CLI. |
 | D18 | Onboarding | Free for all + self-service upgrade + admin override | Approval-gated only | Maximizes adoption. Tier-based (free → paid) via billing status. |
@@ -1371,7 +1371,7 @@ This section records the architectural decisions made during design and the rati
 | D24 | CNI + ingress | Cilium (CNI + NetworkPolicy + Gateway API) | Calico + Envoy Gateway, Cilium + Contour | Single component for networking + security + ingress. Fewer moving parts. |
 | D25 | SSH access | CLI tunnel (default) + public IP (opt-in) | Public IP only, bastion host | Secure by default. No public exposure unless requested. |
 | D26 | Observability (v1) | Prometheus + VictoriaMetrics + DCGM + Grafana | Full OTel + Loki + Tempo | Minimal viable stack. Logs and traces deferred to v2. |
-| D27 | Target audience | KCP community + small cloud operators + EU sovereign projects | Single audience | Broad relevance. Tone and depth balanced for all three. |
+| D27 | Target audience | kcp community + small cloud operators + EU sovereign projects | Single audience | Broad relevance. Tone and depth balanced for all three. |
 | D28 | Ecosystem alignment | CNCF-aligned, independent | SCS-aligned, Gaia-X certified | We reference sovereign initiatives but don't bind to their standards. |
 
 ---

@@ -1,6 +1,6 @@
 # Sovereign Small Cloud — Reference Architecture
 
-A reference architecture for building a multi-tenant cloud platform on commodity hardware using [KCP](https://kcp.io) as the control plane.
+A reference architecture for building a multi-tenant cloud platform on commodity hardware using [kcp](https://kcp.io) as the control plane.
 
 ## What Is This?
 
@@ -11,7 +11,7 @@ A blueprint for small infrastructure providers who want to offer cloud services 
 ```
 Layer 3: Production           Billing, metering, monitoring, day-2 ops
 ──────────────────────────────────────────────────────────────────────
-Layer 2: Platform              KCP, cloud APIs, identity, cloud operator
+Layer 2: Platform              kcp, cloud APIs, identity, cloud operator
                                ← DEMO
 ──────────────────────────────────────────────────────────────────────
 Layer 1: Infrastructure        Bare metal → Kubernetes (Metal3, Flatcar,
@@ -23,7 +23,7 @@ Layer 1: Infrastructure        Bare metal → Kubernetes (Metal3, Flatcar,
 | Document | What it covers |
 |----------|---------------|
 | [01-infrastructure.md](01-infrastructure.md) | **Layer 1:** From bare metal to compute-ready K8s |
-| [02-platform.md](02-platform.md) | **Layer 2:** Multi-tenant cloud APIs with KCP — **demo lives here** |
+| [02-platform.md](02-platform.md) | **Layer 2:** Multi-tenant cloud APIs with kcp — **demo lives here** |
 | [03-production.md](03-production.md) | **Layer 3:** Billing, monitoring, backup, operations |
 | [overview.md](overview.md) | Simplified architecture overview |
 | [deployment.md](deployment.md) | Production deployment guide (20 phases) |
@@ -34,7 +34,7 @@ Layer 1: Infrastructure        Bare metal → Kubernetes (Metal3, Flatcar,
 
 | Component | Role | License |
 |-----------|------|---------|
-| [KCP](https://kcp.io) | Multi-tenant control plane | Apache 2.0 |
+| [kcp](https://kcp.io) | Multi-tenant control plane | Apache 2.0 |
 | [Kubernetes](https://kubernetes.io) | Workload execution | Apache 2.0 |
 | [Cilium](https://cilium.io) | Networking + isolation + ingress | Apache 2.0 |
 | [Dex](https://dexidp.io) | OIDC broker (demo) | Apache 2.0 |

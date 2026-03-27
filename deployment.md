@@ -17,7 +17,7 @@
 5. [Phase 1: Bare Metal Provisioning (Metal3 + Flatcar)](#5-phase-1-bare-metal-provisioning-metal3--flatcar)
 6. [Phase 2: Management Cluster Bootstrap](#6-phase-2-management-cluster-bootstrap)
 7. [Phase 3: Workload Cluster Provisioning (Cluster API)](#7-phase-3-workload-cluster-provisioning-cluster-api)
-8. [Phase 4: KCP Control Plane](#8-phase-4-kcp-control-plane)
+8. [Phase 4: kcp Control Plane](#8-phase-4-kcp-control-plane)
 9. [Phase 5: Identity — Zitadel](#9-phase-5-identity--zitadel)
 10. [Phase 6: Networking — Cilium](#10-phase-6-networking--cilium)
 11. [Phase 7: Storage — Rook-Ceph](#11-phase-7-storage--rook-ceph)
@@ -56,7 +56,7 @@ This document provides production-grade deployment instructions for the sovereig
 | Persona | Responsibilities |
 |---------|-----------------|
 | **Infrastructure Operator** | Rack hardware, network switches, BMC setup, Metal3 |
-| **Platform Operator** | KCP, Zitadel, OpenMeter, operators, day-2 operations |
+| **Platform Operator** | kcp, Zitadel, OpenMeter, operators, day-2 operations |
 | **Service Developer** | New platform APIs (CRDs), service operators |
 
 ### Time Estimates
@@ -67,16 +67,16 @@ This document provides production-grade deployment instructions for the sovereig
 | Metal3 + Flatcar setup | 1 day | Hardware ready |
 | Management cluster | 2-4 hours | Metal3 or manual OS |
 | Workload cluster (CAPI) | 1-2 hours | Management cluster |
-| KCP | 2-4 hours | Management cluster |
-| Zitadel | 1-2 hours | KCP, DNS |
+| kcp | 2-4 hours | Management cluster |
+| Zitadel | 1-2 hours | kcp, DNS |
 | Cilium | 1 hour | Both clusters |
 | Rook-Ceph | 2-4 hours | Workload cluster, dedicated disks |
 | GPU Operator + Kueue | 1-2 hours | Workload cluster, GPU hardware |
 | KubeVirt | 1-2 hours | Workload cluster |
 | Observability | 1-2 hours | Both clusters |
 | OpenMeter | 2-4 hours | Management cluster, Kafka, ClickHouse |
-| Platform APIs + operators | 2-4 hours | KCP, workload cluster |
-| Console + CLI | 1-2 hours | KCP, Zitadel |
+| Platform APIs + operators | 2-4 hours | kcp, workload cluster |
+| Console + CLI | 1-2 hours | kcp, Zitadel |
 | TLS + DNS | 1-2 hours | cert-manager, domain |
 | Security hardening | 2-4 hours | Everything deployed |
 | **Total** | **3-5 days** | |
@@ -125,7 +125,7 @@ This document provides production-grade deployment instructions for the sovereig
         +------------+------------------------+
         |            |            |           |
    +----v---+  +----v---+  +----v---+  +---v----+
-   | 7. KCP |  | 8. ID  |  | 9. OBS |  |10.BILL|
+   | 7. kcp |  | 8. ID  |  | 9. OBS |  |10.BILL|
    |        |  |Zitadel |  |Prom+VM |  |OpenMtr |
    +----+---+  +--------+  +--------+  +--------+
         |
@@ -142,7 +142,7 @@ This document provides production-grade deployment instructions for the sovereig
 ```
 MANAGEMENT CLUSTER owns:                WORKLOAD CLUSTER owns:
 ---------------------                   ----------------------
-KCP (server + front-proxy)              Tenant workload pods
+kcp (server + front-proxy)              Tenant workload pods
 Zitadel (identity)                      KubeVirt VMs
 OpenMeter (server + deps)               GPU jobs
 Prometheus (federation)                 Cilium (CNI + Gateway)
@@ -770,9 +770,9 @@ kubectl --kubeconfig=workload-1.kubeconfig get nodes
 
 ---
 
-## 8. Phase 4: KCP Control Plane
+## 8. Phase 4: kcp Control Plane
 
-### 8.1 Deploy KCP via kcp-operator
+### 8.1 Deploy kcp via kcp-operator
 
 ```bash
 export KUBECONFIG=management.kubeconfig
@@ -784,7 +784,7 @@ helm install kcp-operator kcp/kcp-operator \
   --namespace kcp-system
 ```
 
-### 8.2 Create KCP Installation
+### 8.2 Create kcp Installation
 
 ```yaml
 # kcp-installation.yaml
@@ -892,7 +892,7 @@ After Zitadel is running, configure via admin console at `https://auth.demo.exam
 
 1. Create GitHub Identity Provider (Client ID + Secret from GitHub OAuth app)
 2. Create Google Identity Provider (Client ID + Secret from Google Cloud Console)
-3. Create OIDC Application for KCP (Web type, authorization code flow)
+3. Create OIDC Application for kcp (Web type, authorization code flow)
 4. Create OIDC Application for CLI (Native type, device authorization grant)
 
 ---
@@ -1291,7 +1291,7 @@ See `whitepaper.md` Section 14 for meter definitions and billing plan configurat
 
 ## 16. Phase 12: Platform APIs and Operators
 
-### 16.1 Define APIs in KCP
+### 16.1 Define APIs in kcp
 
 Create APIResourceSchemas and APIExports in the platform workspace for:
 - `Compute` (container workloads)
@@ -1305,22 +1305,22 @@ See `whitepaper.md` Section 10 for full API schemas.
 ### 16.2 Deploy Service Operators
 
 Each operator runs on the management cluster with:
-- KCP kubeconfig (virtual workspace access)
+- kcp kubeconfig (virtual workspace access)
 - Workload cluster kubeconfig
 - OpenMeter credentials (for usage event emission)
 
 Operator reconciliation pattern:
 1. Watch virtual workspace for tenant resource changes
 2. Create/update workloads in tenant namespace on workload cluster
-3. Update resource status back in KCP
+3. Update resource status back in kcp
 4. Emit usage events to OpenMeter
 
 ---
 
 ## 17. Phase 13: Tenant Onboarding Controller
 
-Watches for new KCP users and provisions:
-1. KCP workspace with APIBindings
+Watches for new kcp users and provisions:
+1. kcp workspace with APIBindings
 2. RBAC (user = workspace admin)
 3. Default ResourceQuota (free tier)
 4. OpenMeter customer + subscription
@@ -1331,13 +1331,13 @@ Watches for new KCP users and provisions:
 
 ## 18. Phase 14: Quota and Admission Control
 
-KCP validating webhook that checks OpenMeter entitlements before allowing resource creation. Denies requests with clear error messages when quotas are exceeded, directing users to upgrade their plan.
+kcp validating webhook that checks OpenMeter entitlements before allowing resource creation. Denies requests with clear error messages when quotas are exceeded, directing users to upgrade their plan.
 
 ---
 
 ## 19. Phase 15: Web Console
 
-Single-page application talking to KCP (resource CRUD), Zitadel (auth), and OpenMeter (billing). Deployed as a static site on the management cluster.
+Single-page application talking to kcp (resource CRUD), Zitadel (auth), and OpenMeter (billing). Deployed as a static site on the management cluster.
 
 ---
 
@@ -1395,8 +1395,8 @@ tunnel.demo.example.com        A    <management-public-ip>
 ### Checklist
 
 - [ ] Cilium WireGuard encryption enabled (inter-node traffic)
-- [ ] etcd encryption at rest (KCP + workload cluster)
-- [ ] RBAC audit logging on KCP
+- [ ] etcd encryption at rest (kcp + workload cluster)
+- [ ] RBAC audit logging on kcp
 - [ ] Pod Security Standards enforced (restricted baseline)
 - [ ] Default-deny NetworkPolicies on all namespaces
 - [ ] Secrets encrypted with external KMS or sealed-secrets
@@ -1415,7 +1415,7 @@ tunnel.demo.example.com        A    <management-public-ip>
 
 | Component | Method | Frequency |
 |-----------|--------|-----------|
-| KCP etcd | etcd snapshot | Hourly |
+| kcp etcd | etcd snapshot | Hourly |
 | Zitadel PostgreSQL | pg_dump | Every 6 hours |
 | OpenMeter PostgreSQL | pg_dump | Every 6 hours |
 | OpenMeter ClickHouse | ClickHouse backup | Daily |
@@ -1458,13 +1458,13 @@ kubectl --kubeconfig=management.kubeconfig \
 
 ### Adding a New Service Type
 
-1. Define new APIResourceSchema + APIExport in KCP platform workspace
+1. Define new APIResourceSchema + APIExport in kcp platform workspace
 2. Deploy operator on management cluster
 3. Update onboarding controller to auto-bind new API for new tenants
 
 ### Key Alerts
 
-- KCP control plane down
+- kcp control plane down
 - GPU node not ready
 - Ceph health degraded
 - Tenant quota at 90%
@@ -1497,7 +1497,7 @@ kubectl --kubeconfig=management.kubeconfig \
 | Port | Protocol | Component | Purpose |
 |------|----------|-----------|---------|
 | 6443 | TCP | kube-apiserver | K8s API |
-| 443 | TCP | KCP front-proxy | Tenant API access |
+| 443 | TCP | kcp front-proxy | Tenant API access |
 | 443 | TCP | Zitadel | OIDC endpoints |
 | 443 | TCP | Web console | UI |
 | 443 | TCP | Grafana | Dashboards |
@@ -1527,10 +1527,10 @@ kubectl --kubeconfig=management.kubeconfig \
 ## Appendix C: Certificate Architecture
 
 ```
-Root CA (KCP)
-+-- KCP server certificate
-+-- KCP front-proxy client certificate
-+-- KCP service account signing key
+Root CA (kcp)
++-- kcp server certificate
++-- kcp front-proxy client certificate
++-- kcp service account signing key
 +-- Kubeconfig client certificates
 
 Let's Encrypt (public-facing)
@@ -1556,7 +1556,7 @@ Ceph (internal)
 +-- RGW (S3) TLS certificate
 ```
 
-cert-manager manages all Let's Encrypt certificates with automatic renewal. Kubernetes and KCP CAs are generated during cluster bootstrap. Ceph certificates are managed by Rook.
+cert-manager manages all Let's Encrypt certificates with automatic renewal. Kubernetes and kcp CAs are generated during cluster bootstrap. Ceph certificates are managed by Rook.
 
 ---
 

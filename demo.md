@@ -43,7 +43,7 @@ This document provides a practical, step-by-step guide to deploying the sovereig
 
 | Component | Demo | Production (whitepaper) |
 |-----------|------|------------------------|
-| KCP (control plane) | Yes | Yes |
+| kcp (control plane) | Yes | Yes |
 | Zitadel (identity) | Yes | Yes |
 | OpenMeter (billing) | Yes | Yes |
 | Kubernetes (workloads) | kubeadm (manual) | Metal3 + Flatcar + CAPI |
@@ -90,7 +90,7 @@ GPU                   Real GPU if available,         NVIDIA GPU Operator
                       spoofing
 
 HA                    Single replica                 Multi-replica, anti-affinity
-                      (KCP, Zitadel, OpenMeter)      Sharded KCP if needed
+                      (kcp, Zitadel, OpenMeter)      Sharded kcp if needed
 
 TLS                   Self-signed or Let's Encrypt   Let's Encrypt + cert-manager
                       (if public DNS available)
@@ -192,7 +192,7 @@ For a compelling live demo, we recommend **Option A (Cherry Servers)** with 3 CP
 │                                                               │
 │  Components:                                                  │
 │  ├── Kubernetes control plane (kubeadm)                      │
-│  ├── KCP (server + front-proxy)                              │
+│  ├── kcp (server + front-proxy)                              │
 │  ├── Zitadel                                                 │
 │  ├── OpenMeter (+ Kafka/Redpanda + ClickHouse + PostgreSQL)  │
 │  ├── Prometheus + VictoriaMetrics + Grafana                  │
@@ -390,7 +390,7 @@ kubectl --kubeconfig=workload.kubeconfig get pods -A  # Cilium running
 
 ## 7. Phase 2: Platform Core
 
-### Install KCP
+### Install kcp
 
 ```bash
 # On management cluster
@@ -408,7 +408,7 @@ helm install kcp kcp/kcp \
 # Run as a deployment or directly on the management node
 ```
 
-### Verify KCP
+### Verify kcp
 
 ```bash
 # Get admin kubeconfig
@@ -478,7 +478,7 @@ helm install zitadel zitadel/zitadel \
 #    - Type: Google
 #    - Client ID: <from Google Cloud Console>
 #    - Client Secret: <from Google Cloud Console>
-# 4. Create an OIDC application for KCP:
+# 4. Create an OIDC application for kcp:
 #    - Name: kcp
 #    - Type: Web Application
 #    - Redirect URIs: (as needed for console)
@@ -488,11 +488,11 @@ helm install zitadel zitadel/zitadel \
 #    - Auth Method: Device Authorization
 ```
 
-### Connect KCP to Zitadel
+### Connect kcp to Zitadel
 
 ```bash
-# Update KCP configuration to trust Zitadel as OIDC issuer
-# This is typically done via KCP's --oidc-issuer-url flag or Helm values:
+# Update kcp configuration to trust Zitadel as OIDC issuer
+# This is typically done via kcp's --oidc-issuer-url flag or Helm values:
 #   oidc:
 #     issuerURL: https://auth.demo.example.com
 #     clientID: kcp
@@ -507,7 +507,7 @@ helm install zitadel zitadel/zitadel \
 ### Platform Workspace Setup
 
 ```bash
-# Create the platform workspace in KCP
+# Create the platform workspace in kcp
 export KUBECONFIG=kcp-admin.kubeconfig
 
 # Create platform workspace for APIExports
@@ -591,7 +591,7 @@ spec:
 
 ### Onboarding Controller
 
-The onboarding controller watches for new users (via KCP home workspaces or a custom mechanism) and:
+The onboarding controller watches for new users (via kcp home workspaces or a custom mechanism) and:
 
 1. Creates a workspace for the new tenant
 2. Binds platform APIExports (compute, storage, network, ai)
@@ -686,7 +686,7 @@ kubectl create secret generic stripe-credentials \
 ### Quota Controller
 
 ```bash
-# Deploy KCP admission webhook that checks OpenMeter entitlements
+# Deploy kcp admission webhook that checks OpenMeter entitlements
 kubectl apply -f deploy/quota-controller.yaml
 ```
 
@@ -698,7 +698,7 @@ kubectl apply -f deploy/quota-controller.yaml
 
 ```bash
 # Build and deploy the web console
-# The console is a static SPA that talks to KCP + Zitadel + OpenMeter APIs
+# The console is a static SPA that talks to kcp + Zitadel + OpenMeter APIs
 
 kubectl apply -f deploy/web-console.yaml
 
@@ -888,7 +888,7 @@ Focus on the tenant developer workflow.
 
 Focus on the platform operator workflow.
 
-1. Show KCP admin view (workspaces, tenants)
+1. Show kcp admin view (workspaces, tenants)
 2. Show Grafana dashboards (infrastructure, per-tenant)
 3. Show OpenMeter admin (usage, billing, plans)
 4. Create a new service type (add a CRD + operator)
@@ -900,7 +900,7 @@ Focus on the platform operator workflow.
 Complete walkthrough for technical audience.
 
 1. Architecture diagram walkthrough
-2. KCP workspace creation and APIBinding
+2. kcp workspace creation and APIBinding
 3. Operator reconciliation loop (show virtual workspace)
 4. Workload appearing on backend cluster
 5. Network isolation (show Cilium policies)
@@ -917,7 +917,7 @@ Complete walkthrough for technical audience.
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| KCP workspace not ready | APIBinding not resolved | Check APIExport exists in platform workspace |
+| kcp workspace not ready | APIBinding not resolved | Check APIExport exists in platform workspace |
 | OIDC login fails | Zitadel misconfigured | Verify `--oidc-issuer-url` matches Zitadel's external URL |
 | Workload not created on backend | Operator not running or no workload kubeconfig | Check operator logs, verify secret exists |
 | Metering shows zero usage | OpenMeter collector not deployed on workload cluster | Deploy collector DaemonSet |
@@ -928,7 +928,7 @@ Complete walkthrough for technical audience.
 ### Debug Commands
 
 ```bash
-# KCP
+# kcp
 kubectl ws tree                          # Workspace hierarchy
 kubectl get apiexports -A                # All API exports
 kubectl get apibindings -A               # All bindings
