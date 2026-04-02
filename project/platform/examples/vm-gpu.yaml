@@ -1,0 +1,14 @@
+apiVersion: compute.cloud.platform/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: gpu-workstation
+spec:
+  cores: 8
+  memory: "32Gi"
+  disk:
+    size: "200Gi"
+    image: ubuntu-24.04
+  gpu:
+    count: 1
+  ssh:
+    publicKey: "ssh-ed25519 AAAA... user@example.com"

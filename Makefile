@@ -1,0 +1,83 @@
+.PHONY: build build-platform build-console clean generate lint test tidy codegen crds tools verify-codegen docker-console run-console
+
+PLATFORM_DIR := project/platform
+CONSOLE_DIR := project/console
+BINARY_DIR := bin
+
+# Tool versions (matching kedge)
+CONTROLLER_GEN_VER := v0.16.5
+CONTROLLER_GEN_BIN := controller-gen
+CONTROLLER_GEN := $(PLATFORM_DIR)/hack/tools/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
+export CONTROLLER_GEN
+
+KCP_APIGEN_VER := v0.30.0
+KCP_APIGEN_BIN := apigen
+KCP_APIGEN_GEN := $(PLATFORM_DIR)/hack/tools/$(KCP_APIGEN_BIN)-$(KCP_APIGEN_VER)
+export KCP_APIGEN_GEN
+
+GO_INSTALL := $(PLATFORM_DIR)/hack/go-install.sh
+TOOLS_GOBIN_DIR := $(abspath $(PLATFORM_DIR)/hack/tools)
+
+# --- Build ---
+
+build: build-platform build-cli
+
+build-platform:
+	cd $(PLATFORM_DIR) && go build -o ../../$(BINARY_DIR)/platform ./cmd/platform
+
+build-cli:
+	cd $(PLATFORM_DIR) && go build -o ../../$(BINARY_DIR)/platform-cli ./cmd/cli
+
+build-console:
+	cd $(CONSOLE_DIR) && $(MAKE) build
+
+docker-console:
+	cd $(CONSOLE_DIR) && $(MAKE) docker-build
+
+run-console: docker-console ## Build and run NeoCloud console
+	docker rm -f platform-console 2>/dev/null || true
+	docker run --name platform-console -p 4466:4466 platform-console:latest
+	@echo "Console running at http://localhost:4466/"
+
+# --- Code generation ---
+
+crds: $(CONTROLLER_GEN) $(KCP_APIGEN_GEN) ## Generate CRDs, deepcopy, and kcp APIResourceSchemas
+	cd $(PLATFORM_DIR) && ./hack/update-codegen-crds.sh
+
+codegen: crds ## Generate all (CRDs + kcp resources + deepcopy)
+
+verify-codegen: codegen ## Verify codegen is up to date
+	@if ! git diff --quiet HEAD -- $(PLATFORM_DIR); then \
+		echo "ERROR: codegen produced a diff. Please run 'make codegen' and commit the result."; \
+		git diff --stat HEAD -- $(PLATFORM_DIR); \
+		exit 1; \
+	fi
+
+# --- Tools ---
+
+tools: $(CONTROLLER_GEN) $(KCP_APIGEN_GEN) ## Install all dev tools
+
+$(CONTROLLER_GEN):
+	GOBIN=$(TOOLS_GOBIN_DIR) $(GO_INSTALL) sigs.k8s.io/controller-tools/cmd/controller-gen $(CONTROLLER_GEN_BIN) $(CONTROLLER_GEN_VER)
+
+$(KCP_APIGEN_GEN):
+	GOBIN=$(TOOLS_GOBIN_DIR) $(GO_INSTALL) github.com/kcp-dev/sdk/cmd/apigen $(KCP_APIGEN_BIN) $(KCP_APIGEN_VER)
+
+# --- Standard targets ---
+
+clean:
+	rm -rf $(BINARY_DIR)
+	rm -rf $(PLATFORM_DIR)/hack/tools
+	cd $(CONSOLE_DIR) && $(MAKE) clean
+
+generate:
+	cd $(PLATFORM_DIR) && go generate ./...
+
+test:
+	cd $(PLATFORM_DIR) && go test ./... -count=1
+
+lint:
+	cd $(PLATFORM_DIR) && golangci-lint run ./...
+
+tidy:
+	cd $(PLATFORM_DIR) && go mod tidy

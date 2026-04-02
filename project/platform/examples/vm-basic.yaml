@@ -1,0 +1,10 @@
+apiVersion: compute.cloud.platform/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: my-vm
+spec:
+  cores: 2
+  memory: "4Gi"
+  disk:
+    size: "50Gi"
+    image: ubuntu-24.04

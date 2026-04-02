@@ -1,0 +1,10 @@
+apiVersion: compute.cloud.platform/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: dev-box
+spec:
+  cores: 1
+  memory: "2Gi"
+  disk:
+    size: "20Gi"
+    image: debian-12
