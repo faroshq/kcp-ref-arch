@@ -72,12 +72,35 @@ async function k8sCreate<T = K8sResource>(path: string, resource: unknown): Prom
   return resp.json();
 }
 
+async function k8sUpdate<T = K8sResource>(path: string, resource: unknown): Promise<T> {
+  const resp = await fetch(`${baseUrl()}${path}`, {
+    method: 'PUT', headers: headers(), body: JSON.stringify(resource),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`API error ${resp.status}: ${text}`);
+  }
+  return resp.json();
+}
+
+async function k8sDelete(path: string): Promise<void> {
+  const resp = await fetch(`${baseUrl()}${path}`, {
+    method: 'DELETE', headers: headers(),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`API error ${resp.status}: ${text}`);
+  }
+}
+
 const COMPUTE_API = '/apis/compute.cloud.platform/v1alpha1';
 
 export const vmApi = {
   list: () => k8sList(`${COMPUTE_API}/virtualmachines`),
   get: (name: string) => k8sGet(`${COMPUTE_API}/virtualmachines/${name}`),
   create: (resource: unknown) => k8sCreate(`${COMPUTE_API}/virtualmachines`, resource),
+  update: (name: string, resource: unknown) => k8sUpdate(`${COMPUTE_API}/virtualmachines/${name}`, resource),
+  delete: (name: string) => k8sDelete(`${COMPUTE_API}/virtualmachines/${name}`),
 };
 
 export const kcApi = {

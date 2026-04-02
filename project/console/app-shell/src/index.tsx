@@ -9,6 +9,7 @@ import { Dashboard } from './dashboard';
 import { VMListPage } from './pages/VMListPage';
 import { VMDetailPage } from './pages/VMDetailPage';
 import { VMCreatePage } from './pages/VMCreatePage';
+import { VMEditPage } from './pages/VMEditPage';
 import { KCListPage } from './pages/KCListPage';
 import { KCDetailPage } from './pages/KCDetailPage';
 
@@ -36,6 +37,7 @@ instance.root.registerPage('/auth/callback', () => null);
 // Compute pages
 instance.root.registerPage('/vm', () => <VMListPage />);
 instance.root.registerPage('/vm/create', () => <VMCreatePage />);
+instance.root.registerPage('/vm/:name/edit', () => <VMEditPage />);
 instance.root.registerPage('/vm/:name', () => <VMDetailPage />);
 
 // Kubernetes pages

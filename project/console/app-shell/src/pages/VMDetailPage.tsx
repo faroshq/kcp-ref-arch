@@ -2,6 +2,7 @@ import * as React from 'react';
 import {
   Box, Typography, Paper, CircularProgress, Chip, Button,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { vmApi, type K8sResource } from './api';
@@ -12,6 +13,8 @@ export const VMDetailPage: React.FC = () => {
   const [vm, setVm] = React.useState<K8sResource | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
+  const [showDelete, setShowDelete] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   React.useEffect(() => {
     if (!name) return;
@@ -21,16 +24,30 @@ export const VMDetailPage: React.FC = () => {
       .finally(() => setLoading(false));
   }, [name]);
 
+  const handleDelete = async () => {
+    if (!name) return;
+    setDeleting(true);
+    try {
+      await vmApi.delete(name);
+      navigate('/vm');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to delete VM');
+      setDeleting(false);
+      setShowDelete(false);
+    }
+  };
+
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!vm) return <Typography>VM not found</Typography>;
 
   const spec = (vm.spec || {}) as Record<string, unknown>;
+  const disk = (spec.disk || {}) as Record<string, unknown>;
+  const gpu = (spec.gpu || {}) as Record<string, unknown>;
+  const ssh = (spec.ssh || {}) as Record<string, unknown>;
   const status = (vm.status || {}) as Record<string, unknown>;
   const phase = (status.phase as string) || 'Unknown';
   const conditions = (status.conditions as Array<Record<string, string>>) || [];
-  const ips = (status.internalIPs as string[]) || [];
-  const endpoints = (status.endpoints as Record<string, string>) || {};
 
   return (
     <Box>
@@ -38,6 +55,9 @@ export const VMDetailPage: React.FC = () => {
         <Button variant="text" onClick={() => navigate('/vm')}>&larr; Back</Button>
         <Typography variant="h5">{vm.metadata.name}</Typography>
         <Chip label={phase} color={phase === 'Running' ? 'success' : phase === 'Failed' ? 'error' : 'warning'} />
+        <Box sx={{ flex: 1 }} />
+        <Button variant="outlined" onClick={() => navigate(`/vm/${name}/edit`)}>Edit</Button>
+        <Button variant="outlined" color="error" onClick={() => setShowDelete(true)}>Delete</Button>
       </Box>
 
       <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
@@ -45,18 +65,18 @@ export const VMDetailPage: React.FC = () => {
           <Typography variant="h6" gutterBottom>Specification</Typography>
           <InfoRow label="CPU Cores" value={spec.cores} />
           <InfoRow label="Memory" value={spec.memory} />
-          <InfoRow label="Disk Size" value={spec.diskSize} />
-          <InfoRow label="Image" value={spec.image} />
-          <InfoRow label="GPU Count" value={spec.gpuCount || 0} />
-          {spec.sshPublicKey && <InfoRow label="SSH Key" value="Configured" />}
+          <InfoRow label="Disk Size" value={disk.size} />
+          <InfoRow label="Image" value={disk.image} />
+          <InfoRow label="GPU Count" value={gpu.count || 0} />
+          {ssh.publicKey && <InfoRow label="SSH Key" value="Configured" />}
         </Paper>
         <Paper sx={{ p: 3, flex: '1 1 400px' }}>
           <Typography variant="h6" gutterBottom>Status</Typography>
           <InfoRow label="Phase" value={phase} />
-          <InfoRow label="Internal IPs" value={ips.join(', ') || 'None'} />
-          {Object.entries(endpoints).map(([k, v]) => (
-            <InfoRow key={k} label={k} value={v} />
-          ))}
+          <InfoRow label="Internal IP" value={status.internalIP || 'None'} />
+          {status.sshEndpoint && <InfoRow label="SSH Endpoint" value={status.sshEndpoint} />}
+          {status.tunnelEndpoint && <InfoRow label="Tunnel Endpoint" value={status.tunnelEndpoint} />}
+          {status.message && <InfoRow label="Message" value={status.message} />}
         </Paper>
       </Box>
 
@@ -87,6 +107,21 @@ export const VMDetailPage: React.FC = () => {
           </TableContainer>
         </Paper>
       )}
+
+      <Dialog open={showDelete} onClose={() => setShowDelete(false)}>
+        <DialogTitle>Delete Virtual Machine</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete <strong>{name}</strong>? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDelete(false)} disabled={deleting}>Cancel</Button>
+          <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
