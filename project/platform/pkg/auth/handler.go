@@ -26,9 +26,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	oidc "github.com/coreos/go-oidc"
 	"github.com/gorilla/mux"
@@ -50,6 +53,10 @@ type authState struct {
 	RedirectURL  string `json:"redirectURL"`
 	SessionID    string `json:"sessionID"`
 	CodeVerifier string `json:"codeVerifier"`
+	// PlatformState is the downstream client's OAuth2 state (e.g. from Headlamp).
+	// When set, the callback uses the OIDC proxy code flow instead of the
+	// legacy response= redirect.
+	PlatformState string `json:"platformState,omitempty"`
 }
 
 // CallbackResponse is returned to the browser/CLI after successful OIDC login.
@@ -74,6 +81,19 @@ type WorkspaceProvisioner interface {
 	EnsureTenantWorkspace(ctx context.Context, workspaceName, oidcUserName string) (string, error)
 }
 
+// pendingAuth stores the result of a completed OIDC flow, keyed by a
+// short-lived platform auth code. This lets the platform server act as
+// an OIDC provider proxy: the callback issues a code that the downstream
+// client (e.g. Headlamp) exchanges at /auth/token.
+type pendingAuth struct {
+	rawIDToken   string
+	refreshToken string
+	expiresAt    int64
+	email        string
+	clusterPath  string
+	createdAt    time.Time
+}
+
 // Handler provides OAuth2/OIDC authentication endpoints.
 type Handler struct {
 	oidcProvider   *oidc.Provider
@@ -83,6 +103,11 @@ type Handler struct {
 	provisioner    WorkspaceProvisioner
 	devMode        bool
 	logger         klog.Logger
+
+	// pendingCodes maps platform-issued auth codes to their token data.
+	// Codes are single-use and expire after 60 seconds.
+	pendingMu    sync.Mutex
+	pendingCodes map[string]*pendingAuth
 }
 
 // NewHandler creates a new OIDC auth handler.
@@ -128,6 +153,7 @@ func NewHandler(ctx context.Context, config *OIDCConfig, hubExternalURL string, 
 		provisioner:    provisioner,
 		devMode:        devMode,
 		logger:         klog.Background().WithName("auth-handler"),
+		pendingCodes:   make(map[string]*pendingAuth),
 	}, nil
 }
 
@@ -138,8 +164,12 @@ func (h *Handler) Verifier() *oidc.IDTokenVerifier {
 
 // RegisterRoutes registers auth routes on the given router.
 func (h *Handler) RegisterRoutes(router *mux.Router) {
+	router.HandleFunc("/.well-known/openid-configuration", h.HandleDiscovery).Methods("GET")
 	router.HandleFunc("/auth/authorize", h.HandleAuthorize).Methods("GET")
 	router.HandleFunc("/auth/callback", h.HandleCallback).Methods("GET")
+	router.HandleFunc("/auth/token", h.HandleTokenExchange).Methods("POST")
+	router.HandleFunc("/auth/keys", h.HandleJWKS).Methods("GET")
+	router.HandleFunc("/auth/me", h.HandleMe).Methods("GET", "OPTIONS")
 }
 
 // HandleAuthorize redirects to the OIDC provider for authentication.
@@ -174,10 +204,15 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		sessionID = "browser"
 	}
 
+	// If the caller passes a standard OAuth2 "state" param, store it so the
+	// callback can return it alongside the platform-issued code (OIDC proxy mode).
+	clientState := r.URL.Query().Get("state")
+
 	state := authState{
-		RedirectURL:  redirectURI,
-		SessionID:    sessionID,
-		CodeVerifier: codeVerifier,
+		RedirectURL:   redirectURI,
+		SessionID:     sessionID,
+		CodeVerifier:  codeVerifier,
+		PlatformState: clientState,
 	}
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
@@ -308,13 +343,44 @@ func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		h.logger.Info("Provisioned tenant workspace", "workspace", wsName, "clusterPath", clusterPath, "user", oidcUserName)
 	}
 
+	// Determine whether the caller expects a standard OIDC code flow
+	// (e.g. Headlamp) or the legacy response= redirect (CLI/console).
+	// If the state contains a platformState, use the OIDC code flow.
+	if state.PlatformState != "" {
+		// OIDC proxy mode: issue a platform auth code and redirect with
+		// code= and state= params, like a standard OIDC provider.
+		platformCode, err := generateCodeVerifier()
+		if err != nil {
+			http.Error(w, "failed to generate auth code", http.StatusInternalServerError)
+			return
+		}
+
+		h.pendingMu.Lock()
+		h.pendingCodes[platformCode] = &pendingAuth{
+			rawIDToken:   rawIDToken,
+			refreshToken: token.RefreshToken,
+			expiresAt:    token.Expiry.Unix(),
+			email:        username,
+			clusterPath:  clusterPath,
+			createdAt:    time.Now(),
+		}
+		h.pendingMu.Unlock()
+
+		redirectURL := state.RedirectURL + "?code=" + url.QueryEscape(platformCode) + "&state=" + url.QueryEscape(state.PlatformState)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	// Legacy flow (CLI): return tokens directly as a base64-encoded response
+	// param. Use the platform server URL as the issuer so the CLI refreshes
+	// tokens through the platform server's /auth/token endpoint.
 	resp := CallbackResponse{
 		IDToken:      rawIDToken,
 		RefreshToken: token.RefreshToken,
 		ExpiresAt:    token.Expiry.Unix(),
 		Email:        username,
 		ClusterName:  clusterPath,
-		IssuerURL:    h.oidcConfig.IssuerURL,
+		IssuerURL:    h.hubExternalURL,
 		ClientID:     h.oidcConfig.ClientID,
 		HubURL:       h.hubExternalURL,
 	}
@@ -324,7 +390,6 @@ func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redirect back to the console/CLI with the response as a query parameter.
 	encoded := base64.URLEncoding.EncodeToString(respJSON)
 	redirectURL := state.RedirectURL + "?response=" + encoded
 	http.Redirect(w, r, redirectURL, http.StatusFound)
@@ -370,4 +435,257 @@ func generateCodeVerifier() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// HandleDiscovery returns an OpenID Connect discovery document so that
+// downstream OIDC clients (e.g. Headlamp) can treat the platform server
+// as a standard OIDC provider.
+func (h *Handler) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
+	// Fetch the upstream provider's discovery to forward signing alg values.
+	var upstreamAlgs []string
+	var rawDiscovery struct {
+		Algorithms []string `json:"id_token_signing_alg_values_supported"`
+	}
+	if err := h.oidcProvider.Claims(&rawDiscovery); err == nil && len(rawDiscovery.Algorithms) > 0 {
+		upstreamAlgs = rawDiscovery.Algorithms
+	} else {
+		upstreamAlgs = []string{"RS256"}
+	}
+
+	discovery := map[string]interface{}{
+		"issuer":                                h.hubExternalURL,
+		"authorization_endpoint":                h.hubExternalURL + "/auth/authorize",
+		"token_endpoint":                        h.hubExternalURL + "/auth/token",
+		"jwks_uri":                              h.hubExternalURL + "/auth/keys",
+		"response_types_supported":              []string{"code"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+		"subject_types_supported":               []string{"public"},
+		"id_token_signing_alg_values_supported": upstreamAlgs,
+		"scopes_supported":                      []string{"openid", "profile", "email"},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(discovery) //nolint:errcheck
+}
+
+// HandleTokenExchange implements the OIDC token endpoint. It exchanges
+// platform-issued auth codes (from HandleCallback) for the actual tokens
+// obtained from the upstream provider.
+func (h *Handler) HandleTokenExchange(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	grantType := r.FormValue("grant_type")
+
+	switch grantType {
+	case "authorization_code":
+		h.handleAuthCodeExchange(w, r)
+	case "refresh_token":
+		h.handleRefreshToken(w, r)
+	default:
+		http.Error(w, "unsupported grant_type", http.StatusBadRequest)
+	}
+}
+
+func (h *Handler) handleAuthCodeExchange(w http.ResponseWriter, r *http.Request) {
+	code := r.FormValue("code")
+	if code == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+
+	// Look up and consume the single-use code.
+	h.pendingMu.Lock()
+	pending, ok := h.pendingCodes[code]
+	if ok {
+		delete(h.pendingCodes, code)
+	}
+	// Garbage-collect expired codes while holding the lock.
+	for k, v := range h.pendingCodes {
+		if time.Since(v.createdAt) > 60*time.Second {
+			delete(h.pendingCodes, k)
+		}
+	}
+	h.pendingMu.Unlock()
+
+	if !ok || time.Since(pending.createdAt) > 60*time.Second {
+		http.Error(w, "invalid or expired code", http.StatusBadRequest)
+		return
+	}
+
+	tokenResp := map[string]interface{}{
+		"access_token":  pending.rawIDToken,
+		"id_token":      pending.rawIDToken,
+		"token_type":    "Bearer",
+		"expires_in":    pending.expiresAt - time.Now().Unix(),
+		"refresh_token": pending.refreshToken,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tokenResp) //nolint:errcheck
+}
+
+// handleRefreshToken proxies refresh token requests to the upstream OIDC
+// provider's token endpoint, so clients using the platform server as issuer
+// can transparently refresh their tokens.
+func (h *Handler) handleRefreshToken(w http.ResponseWriter, r *http.Request) {
+	refreshToken := r.FormValue("refresh_token")
+	if refreshToken == "" {
+		http.Error(w, "missing refresh_token", http.StatusBadRequest)
+		return
+	}
+
+	// Get the upstream token endpoint from the provider.
+	endpoint := h.oidcProvider.Endpoint()
+
+	// Build the upstream refresh request.
+	data := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {h.oidcConfig.ClientID},
+	}
+
+	client := http.DefaultClient
+	if h.devMode {
+		client = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // dev mode only
+			},
+		}
+	}
+
+	resp, err := client.PostForm(endpoint.TokenURL, data)
+	if err != nil {
+		h.logger.Error(err, "failed to refresh token with upstream provider")
+		http.Error(w, "upstream token refresh failed", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body) //nolint:errcheck
+}
+
+// HandleJWKS proxies the upstream OIDC provider's JWKS endpoint. The ID
+// tokens are signed by the upstream provider, so verification keys must match.
+func (h *Handler) HandleJWKS(w http.ResponseWriter, r *http.Request) {
+	// Get the upstream JWKS URI from the provider's discovery.
+	var rawDiscovery struct {
+		JWKSURI string `json:"jwks_uri"`
+	}
+	if err := h.oidcProvider.Claims(&rawDiscovery); err != nil || rawDiscovery.JWKSURI == "" {
+		http.Error(w, "failed to determine upstream JWKS URI", http.StatusInternalServerError)
+		return
+	}
+
+	client := http.DefaultClient
+	if h.devMode {
+		client = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // dev mode only
+			},
+		}
+	}
+
+	jwksResp, err := client.Get(rawDiscovery.JWKSURI)
+	if err != nil {
+		h.logger.Error(err, "failed to fetch upstream JWKS")
+		http.Error(w, "failed to fetch JWKS", http.StatusBadGateway)
+		return
+	}
+	defer jwksResp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(jwksResp.StatusCode)
+	io.Copy(w, jwksResp.Body) //nolint:errcheck
+}
+
+// MeResponse is returned by the /auth/me endpoint.
+type MeResponse struct {
+	Email       string `json:"email"`
+	ClusterName string `json:"clusterName,omitempty"`
+	HubURL      string `json:"hubURL"`
+	ServerURL   string `json:"serverURL"`
+}
+
+// HandleMe validates the caller's Bearer token, provisions their workspace
+// if needed, and returns workspace connection info. This lets headlamp
+// plugins discover the user's cluster URL after OIDC login.
+func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
+	// CORS: allow cross-origin requests from headlamp (different port).
+	w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		http.Error(w, "missing or invalid Authorization header", http.StatusUnauthorized)
+		return
+	}
+	rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+
+	verifier := h.oidcProvider.Verifier(&oidc.Config{ClientID: h.oidcConfig.ClientID})
+
+	verifyCtx := r.Context()
+	if h.devMode {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // dev mode only
+		}
+		httpClient := &http.Client{Transport: tr}
+		verifyCtx = oidc.ClientContext(verifyCtx, httpClient)
+	}
+
+	idToken, err := verifier.Verify(verifyCtx, rawToken)
+	if err != nil {
+		h.logger.Error(err, "failed to verify token in /auth/me")
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	var claims oidcClaims
+	if err := idToken.Claims(&claims); err != nil {
+		http.Error(w, "failed to parse claims", http.StatusInternalServerError)
+		return
+	}
+
+	username := claims.username()
+	if username == "" {
+		http.Error(w, "no usable identity in token", http.StatusInternalServerError)
+		return
+	}
+
+	wsName := workspaceNameForUser(username)
+	oidcUserName := "oidc:" + username
+
+	clusterPath := ""
+	if h.provisioner != nil {
+		clusterPath, err = h.provisioner.EnsureTenantWorkspace(r.Context(), wsName, oidcUserName)
+		if err != nil {
+			h.logger.Error(err, "failed to provision workspace in /auth/me")
+			http.Error(w, "failed to provision workspace", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	serverURL := h.hubExternalURL
+	if clusterPath != "" {
+		serverURL = h.hubExternalURL + "/clusters/" + clusterPath
+	}
+
+	meResp := MeResponse{
+		Email:       username,
+		ClusterName: clusterPath,
+		HubURL:      h.hubExternalURL,
+		ServerURL:   serverURL,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(meResp) //nolint:errcheck
 }
